@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "wouter";
-import logoImage from "@assets/generated_images/BrokenVZN_API_logo_design_700a4557.png";
 import { ThemeToggle } from "./theme-toggle";
 
 export default function Navigation() {
@@ -22,7 +21,7 @@ export default function Navigation() {
           <div className="flex items-center space-x-4">
             <Link href="/" className="flex items-center space-x-3">
               <img 
-                src={logoImage} 
+                src="https://files.catbox.moe/ixmjf3.jpg"
                 alt="BrokenVZN API Logo" 
                 className="h-8 w-8 rounded-lg"
                 data-testid="img-logo"
