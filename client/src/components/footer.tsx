@@ -1,5 +1,4 @@
 import { Link } from "wouter";
-import logoImage from "@assets/generated_images/BrokenVZN_API_logo_design_700a4557.png";
 
 export default function Footer() {
   return (
@@ -9,7 +8,7 @@ export default function Footer() {
           <div>
             <div className="flex items-center space-x-3 mb-4">
               <img 
-                src={logoImage} 
+                src="https://files.catbox.moe/ixmjf3.jpg"
                 alt="BrokenVZN API Logo" 
                 className="h-8 w-8 rounded-lg"
                 data-testid="img-logo-footer"
@@ -65,7 +64,7 @@ export default function Footer() {
         
         <div className="border-t border-border mt-8 pt-8 text-center">
           <p className="text-sm text-muted-foreground">
-            © 2024 BrokenVZN API. All rights reserved. • Built with ❤️ for developers
+            © 2025 BrokenVZN API. All rights reserved. • Built with ❤️ for developers
           </p>
         </div>
       </div>
