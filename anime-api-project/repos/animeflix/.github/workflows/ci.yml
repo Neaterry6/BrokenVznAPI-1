@@ -1,0 +1,69 @@
+name: CI/CD
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  # lint and test the project
+  lint-test:
+    runs-on: ubuntu-latest
+    # env:
+    #   TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+    #   TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Setup nodejs
+        uses: actions/setup-node@v3
+        with:
+          node-version: 16.5.0
+
+      - name: Get yarn cache directory path
+        id: yarn-cache-dir-path
+        run: echo "::set-output name=dir::$(yarn cache dir)"
+
+      - name: Yarn cache
+        uses: actions/cache@v2
+        id: yarn-cache
+        with:
+          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
+          key: animeflix-${{ runner.os }}-yarn-${{ hashFiles('yarn.lock') }}
+          restore-keys: |
+            animeflix-${{ runner.os }}-yarn-
+      - name: Install dependencies
+        run: yarn
+
+      - name: Run tests
+        run: yarn test
+  
+  # publish to github container registry
+  publish-docker:
+    # only run if lint and test is success
+    needs: [lint-test]
+    # only run if the workflow was triggered on push
+    if: github.event_name == 'push'
+    
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: login to GitHub Container Registry
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.ACCESS_TOKEN }}
+
+      - name: Publish Docker Image
+        run: | 
+          docker build -t ghcr.io/${{ github.actor }}/animeflix .
+          docker push ghcr.io/${{ github.actor }}/animeflix:latest

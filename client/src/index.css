@@ -1,0 +1,209 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Kaiz API dark theme colors */
+  --background: hsl(220, 30%, 6%);
+  --foreground: hsl(210, 40%, 98%);
+  --card: hsl(220, 30%, 8%);
+  --card-foreground: hsl(210, 40%, 98%);
+  --popover: hsl(220, 30%, 8%);
+  --popover-foreground: hsl(210, 40%, 98%);
+  --primary: hsl(220, 100%, 60%);
+  --primary-foreground: hsl(220, 30%, 6%);
+  --secondary: hsl(220, 30%, 12%);
+  --secondary-foreground: hsl(210, 40%, 98%);
+  --muted: hsl(220, 30%, 10%);
+  --muted-foreground: hsl(215, 20.2%, 65.1%);
+  --accent: hsl(220, 100%, 50%);
+  --accent-foreground: hsl(210, 40%, 98%);
+  --destructive: hsl(0, 62.8%, 50.6%);
+  --destructive-foreground: hsl(210, 40%, 98%);
+  --border: hsl(220, 30%, 15%);
+  --input: hsl(220, 30%, 12%);
+  --ring: hsl(220, 100%, 60%);
+  --chart-1: hsl(220, 100%, 55%);
+  --chart-2: hsl(240, 100%, 65%);
+  --chart-3: hsl(200, 100%, 45%);
+  --chart-4: hsl(180, 100%, 50%);
+  --chart-5: hsl(160, 100%, 40%);
+  --radius: 0.5rem;
+  --font-sans: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+.dark {
+  --background: hsl(220, 30%, 6%);
+  --foreground: hsl(210, 40%, 98%);
+  --card: hsl(220, 30%, 8%);
+  --card-foreground: hsl(210, 40%, 98%);
+  --popover: hsl(220, 30%, 8%);
+  --popover-foreground: hsl(210, 40%, 98%);
+  --primary: hsl(220, 100%, 60%);
+  --primary-foreground: hsl(220, 30%, 6%);
+  --secondary: hsl(220, 30%, 12%);
+  --secondary-foreground: hsl(210, 40%, 98%);
+  --muted: hsl(220, 30%, 10%);
+  --muted-foreground: hsl(215, 20.2%, 65.1%);
+  --accent: hsl(220, 100%, 50%);
+  --accent-foreground: hsl(210, 40%, 98%);
+  --destructive: hsl(0, 62.8%, 50.6%);
+  --destructive-foreground: hsl(210, 40%, 98%);
+  --border: hsl(220, 30%, 15%);
+  --input: hsl(220, 30%, 12%);
+  --ring: hsl(220, 100%, 60%);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+  }
+
+  .method-get {
+    @apply bg-emerald-500/20 text-emerald-400 border-emerald-500/30;
+  }
+
+  .method-post {
+    @apply bg-blue-500/20 text-blue-400 border-blue-500/30;
+  }
+
+  .method-put {
+    @apply bg-orange-500/20 text-orange-400 border-orange-500/30;
+  }
+
+  .method-delete {
+    @apply bg-red-500/20 text-red-400 border-red-500/30;
+  }
+
+  .endpoint-card {
+    @apply bg-card border-border;
+    opacity: 0.8;
+    backdrop-filter: blur(8px);
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  }
+
+  .endpoint-card:hover {
+    @apply bg-card border-primary;
+    opacity: 0.9;
+    transform: translateY(-2px);
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  }
+
+  .code-block {
+    @apply bg-muted border border-border rounded-lg;
+    backdrop-filter: blur(8px);
+    background: linear-gradient(135deg, hsl(220, 30%, 8%) 0%, hsl(220, 25%, 12%) 100%);
+  }
+
+  .status-online {
+    @apply bg-emerald-500;
+    box-shadow: 0 0 10px rgba(34, 197, 94, 0.5);
+  }
+
+  .status-offline {
+    @apply bg-red-500;
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+  }
+
+  .status-maintenance {
+    @apply bg-yellow-500;
+    box-shadow: 0 0 10px rgba(234, 179, 8, 0.5);
+  }
+
+  .kaiz-modal {
+    @apply bg-card backdrop-blur-md border border-border rounded-xl shadow-2xl;
+    opacity: 0.95;
+    background: linear-gradient(135deg, hsl(220, 30%, 8%) 0%, hsl(220, 25%, 10%) 100%);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  }
+
+  .kaiz-button {
+    @apply bg-primary text-primary-foreground border border-primary rounded-lg px-4 py-2 transition-all duration-200;
+    opacity: 0.8;
+    backdrop-filter: blur(8px);
+  }
+
+  .kaiz-button:hover {
+    opacity: 1;
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+  }
+
+  .url-display {
+    @apply bg-muted border border-border rounded-lg p-3 font-mono text-sm;
+    opacity: 0.8;
+    background: linear-gradient(135deg, hsl(220, 30%, 6%) 0%, hsl(220, 25%, 8%) 100%);
+  }
+
+  .response-container {
+    @apply bg-muted border border-border rounded-lg p-4;
+    opacity: 0.6;
+    background: linear-gradient(135deg, hsl(220, 30%, 6%) 0%, hsl(220, 25%, 8%) 100%);
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+/* Loading Animation Extensions */
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes spin-fast {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse-slow {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@keyframes pulse-fast {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 2s linear infinite;
+}
+
+.animate-spin-fast {
+  animation: spin-fast 0.5s linear infinite;
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate-pulse-fast {
+  animation: pulse-fast 0.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}

@@ -1,0 +1,7 @@
+{
+  "venvPath": ".",
+  "venv": ".venv",
+  "root": "senpwai/",
+  "pythonPlatform": "All",
+  "typeCheckingMode": "standard"
+}

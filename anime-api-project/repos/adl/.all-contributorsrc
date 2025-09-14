@@ -1,0 +1,36 @@
+{
+  "files": [
+    "README.md"
+  ],
+  "imageSize": 100,
+  "commit": false,
+  "contributors": [
+    {
+      "login": "Baitinq",
+      "name": "Baitinq",
+      "avatar_url": "https://avatars0.githubusercontent.com/u/30861839?v=4",
+      "profile": "https://github.com/Baitinq",
+      "contributions": [
+        "bug",
+        "code",
+        "ideas"
+      ]
+    },
+    {
+      "login": "Justaus3r",
+      "name": "Justaus3r",
+      "avatar_url": "https://avatars.githubusercontent.com/u/72691864?v=4",
+      "profile": "https://github.com/Justaus3r",
+      "contributions": [
+        "code",
+        "tutorial"
+      ]
+    }
+  ],
+  "contributorsPerLine": 7,
+  "projectName": "adl",
+  "projectOwner": "RaitaroH",
+  "repoType": "github",
+  "repoHost": "https://github.com",
+  "skipCi": true
+}
