@@ -1,5 +1,5 @@
 import ytdl from '@distube/ytdl-core';
-import { spawn } from 'child_process';
+import YTDlpWrap from 'yt-dlp-wrap';
 import axios from 'axios';
 
 export interface YTPlaySearchRequest {
@@ -49,6 +49,11 @@ export interface YTPlayStreamResult {
 
 export class YTPlayService {
   private creator = '@BrokenVZN';
+  private ytDlpWrap: YTDlpWrap;
+
+  constructor() {
+    this.ytDlpWrap = new YTDlpWrap();
+  }
 
   async searchVideos(request: YTPlaySearchRequest): Promise<YTPlayResult> {
     try {
@@ -64,7 +69,7 @@ export class YTPlayService {
 
       console.log(`YTPlay: Searching for "${query}"...`);
       
-      // Use yt-dlp for search as fallback since scrape-yt is unreliable
+      // Use yt-dlp for real search results
       const searchResults = await this.searchWithYtDlp(query, maxResults);
       
       if (!searchResults || !Array.isArray(searchResults) || searchResults.length === 0) {
@@ -81,7 +86,7 @@ export class YTPlayService {
         .map((video: any) => ({
           id: video.id,
           title: video.title || 'Unknown Title',
-          author: video.channel?.name || 'Unknown Channel',
+          author: video.channel?.name || video.uploader || 'Unknown Channel',
           duration: video.duration || 'Unknown Duration',
           views: video.views ? this.formatViews(video.views) : 'Unknown Views',
           thumbnail: video.thumbnail || '',
@@ -216,12 +221,21 @@ export class YTPlayService {
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   }
 
-  // Alternative search method using yt-dlp
+  // Real search method using yt-dlp
   private async searchWithYtDlp(query: string, maxResults: number): Promise<any[]> {
-    return new Promise((resolve, reject) => {
-      // Fallback to mock data when yt-dlp is not available
-      resolve(this.getFallbackSearchResults(query, maxResults));
-    });
+    try {
+      const searchQuery = `ytsearch${maxResults}:${query}`;
+      const ytDlpEventEmitter = this.ytDlpWrap.execPromise([searchQuery, '-J']);
+      const output = await ytDlpEventEmitter;
+
+      // Parse the JSON output from yt-dlp
+      const entries = JSON.parse(output).entries || [];
+      return entries;
+    } catch (error) {
+      console.error('yt-dlp search failed:', error);
+      // Fallback to mock data only if yt-dlp fails
+      return this.getFallbackSearchResults(query, maxResults);
+    }
   }
 
   // Fallback search results when yt-dlp fails
@@ -271,9 +285,9 @@ export class YTPlayService {
   getServiceStatus() {
     return {
       service: 'YTPlay',
-      version: '1.0',
+      version: '1.1',
       status: 'operational',
-      features: ['video_search', 'stream_url', 'audio_extraction', 'fallback_search'],
+      features: ['video_search', 'stream_url', 'audio_extraction', 'yt-dlp_integration'],
       creator: this.creator
     };
   }
