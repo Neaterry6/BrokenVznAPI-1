@@ -1,6 +1,4 @@
 import { GoogleGenAI, Modality } from "@google/genai";
-import * as fs from "fs";
-import * as path from "path";
 import axios from "axios";
 
 export interface GeminiChatRequest {
@@ -20,7 +18,7 @@ export interface GeminiImageChatRequest {
 }
 
 export interface ChatMessage {
-  role: 'user' | 'model';
+  role: "user" | "model";
   parts: Array<{ text?: string; inlineData?: any }>;
 }
 
@@ -39,8 +37,7 @@ export interface GeminiResponse {
 export interface GeminiImageResponse {
   success: boolean;
   data?: {
-    imagePath: string;
-    imageUrl?: string;
+    imageUrl: string;
     description: string;
     model: string;
   };
@@ -57,14 +54,14 @@ export interface ModelInfo {
 }
 
 export class GeminiService {
-  private creator = '@BrokenVZN';
+  private creator = "@BrokenVZN";
   private ai: GoogleGenAI | null;
   private apiKey: string;
 
   constructor() {
-    this.apiKey = process.env.GEMINI_API_KEY || '';
+    this.apiKey = process.env.GEMINI_API_KEY || "";
     if (!this.apiKey) {
-      console.warn('GEMINI_API_KEY not found. AI service will use demo responses.');
+      console.warn("GEMINI_API_KEY not found. AI service will use demo responses.");
       this.ai = null;
     } else {
       this.ai = new GoogleGenAI({ apiKey: this.apiKey });
@@ -72,64 +69,57 @@ export class GeminiService {
   }
 
   // Try multiple image hosting services
-  private async uploadToImageHost(imageData: string): Promise<string | null> {
-    // Try ImgBB first (more reliable than FreeImage.host)
+  private async uploadToImageHost(imageData: string): Promise<string> {
+    // Try ImgBB first
     try {
       const imgbbApiKey = process.env.IMGBB_API_KEY;
       if (imgbbApiKey) {
         const formData = new URLSearchParams();
-        formData.append('image', imageData);
-        
+        formData.append("image", imageData);
+
         const response = await axios.post(`https://api.imgbb.com/1/upload?key=${imgbbApiKey}`, formData, {
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          timeout: 30000
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          timeout: 30000,
         });
-        
+
         if (response.data?.data?.url) {
           return response.data.data.url;
         }
       }
     } catch (error) {
-      console.warn('ImgBB upload failed:', error);
+      console.warn("ImgBB upload failed:", error);
     }
 
-    // Fallback to a simple image hosting service (no API key required)
+    // Fallback to a simple image hosting service
     try {
       const formData = new URLSearchParams();
-      formData.append('image', imageData);
-      
-      const response = await axios.post('https://api.imageupload.net/upload.php', formData, {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        timeout: 30000
+      formData.append("image", imageData);
+
+      const response = await axios.post("https://api.imageupload.net/upload.php", formData, {
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        timeout: 30000,
       });
-      
+
       if (response.data?.url) {
         return response.data.url;
       }
     } catch (error) {
-      console.warn('ImageUpload.net upload failed:', error);
+      console.warn("ImageUpload.net upload failed:", error);
     }
 
-    return null;
-  }
-
-  // Create a local URL for serving the image
-  private createLocalImageUrl(imagePath: string): string {
-    const filename = path.basename(imagePath);
-    
-    // Return a URL that can be served by the static file middleware
-    return `http://localhost:5000/attached_assets/generated_images/${filename}`;
+    // Fallback URL if all uploads fail
+    return "https://placehold.co/600x400?text=Image+Upload+Failed";
   }
 
   async chat(request: GeminiChatRequest): Promise<GeminiResponse> {
     try {
-      const { message, model = 'gemini-1.5-flash', max_tokens = 1000, temperature = 0.7, history } = request;
+      const { message, model = "gemini-2.5-flash", max_tokens = 1000, temperature = 0.7, history } = request;
 
       if (!message?.trim()) {
         return {
           success: false,
-          error: 'Message is required',
-          creator: this.creator
+          error: "I need a message to work with. What do you want to talk about?",
+          creator: this.creator,
         };
       }
 
@@ -137,65 +127,65 @@ export class GeminiService {
       if (!this.ai) {
         return {
           success: true,
-          response: 'This is a demo response from Gemini AI. To get real responses, please configure your GEMINI_API_KEY environment variable.',
-          creator: this.creator
+          response: "Hey! This is a demo response from AYANFE. Set up your GEMINI_API_KEY to get real answers. What can I help you with?",
+          creator: this.creator,
         };
       }
 
       const result = await this.ai.models.generateContent({
         model,
-        contents: [{
-          role: 'user',
-          parts: [{ text: message }]
-        }],
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: message }],
+          },
+        ],
         config: {
           maxOutputTokens: max_tokens,
-          temperature: temperature
-        }
+          temperature: temperature,
+        },
       });
 
-      // Fix response parsing - check for candidates and content
-      let responseText = 'No response generated';
+      let responseText = "Sorry, I couldn’t generate a response. Can you try again?";
       if (result.candidates && result.candidates.length > 0) {
         const candidate = result.candidates[0];
         if (candidate.content && candidate.content.parts && candidate.content.parts.length > 0) {
-          responseText = candidate.content.parts[0].text || 'No response generated';
+          responseText = candidate.content.parts[0].text || responseText;
         }
       }
 
       return {
         success: true,
         response: responseText,
-        creator: this.creator
+        creator: this.creator,
       };
-
     } catch (error) {
-      console.error('Gemini chat error:', error);
+      console.error("Gemini chat error:", error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Chat request failed',
-        creator: this.creator
+        error: "Something went wrong while chatting. Want to try again?",
+        creator: this.creator,
       };
     }
   }
 
   async chatWithImage(request: GeminiImageChatRequest): Promise<GeminiResponse> {
     try {
-      const { message, image, model = 'gemini-2.5-pro', max_tokens = 1000, temperature = 0.7 } = request;
+      const { message, image, model = "gemini-2.5-pro", max_tokens = 1000, temperature = 0.7 } = request;
 
       if (!message?.trim()) {
         return {
           success: false,
-          error: 'Message is required',
-          creator: this.creator
+          error: "Please include a message with your image.",
+          creator: this.creator,
         };
       }
 
       if (!image) {
         return {
           success: false,
-          error: 'Image is required',
-          creator: this.creator
+          error: "An image is required for this request.",
+          creator: this.creator,
         };
       }
 
@@ -203,32 +193,31 @@ export class GeminiService {
       let imageData: string;
       let mimeType: string;
 
-      if (image.startsWith('data:')) {
-        const [header, data] = image.split(',');
-        mimeType = header.split(';')[0].split(':')[1];
+      if (image.startsWith("data:")) {
+        const [header, data] = image.split(",");
+        mimeType = header.split(";")[0].split(":")[1];
         imageData = data;
       } else {
-        // Assume it's raw base64
         imageData = image;
-        mimeType = 'image/jpeg'; // default
+        mimeType = "image/jpeg"; // default
       }
 
       const contents = [
         {
           inlineData: {
             data: imageData,
-            mimeType: mimeType
-          }
+            mimeType: mimeType,
+          },
         },
-        message
+        message,
       ];
 
       // Return demo response if API key is not available
       if (!this.ai) {
         return {
           success: true,
-          response: 'This is a demo response for image chat from Gemini AI. The image has been processed successfully. To get real responses, please configure your GEMINI_API_KEY environment variable.',
-          creator: this.creator
+          response: "This is a demo response for image chat from AYANFE. Your image was processed, but please set up your GEMINI_API_KEY for real responses.",
+          creator: this.creator,
         };
       }
 
@@ -237,57 +226,60 @@ export class GeminiService {
         contents: contents,
         config: {
           maxOutputTokens: max_tokens,
-          temperature: temperature
-        }
+          temperature: temperature,
+        },
       });
 
       return {
         success: true,
-        response: result.text || 'No response generated',
-        creator: this.creator
+        response: result.text || "No response generated. Try again?",
+        creator: this.creator,
       };
-
     } catch (error) {
-      console.error('Gemini image chat error:', error);
+      console.error("Gemini image chat error:", error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Image chat request failed',
-        creator: this.creator
+        error: "Couldn’t process the image chat. Please try again!",
+        creator: this.creator,
       };
     }
   }
 
-  async summarizeText(text: string, model: string = 'gemini-2.5-flash'): Promise<GeminiResponse> {
-    const prompt = `Please provide a concise and informative summary of the following text, highlighting the key points and main ideas:\n\n${text}`;
-    
+  async summarizeText(text: string, model: string = "gemini-2.5-flash"): Promise<GeminiResponse> {
+    const prompt = `Summarize this text in a clear and concise way, focusing on the main points:\n\n${text}`;
+
     return this.chat({
       message: prompt,
       model,
       max_tokens: 500,
-      temperature: 0.3
+      temperature: 0.3,
     });
   }
 
-  async analyzeSentiment(text: string, model: string = 'gemini-2.5-pro'): Promise<GeminiResponse & { sentiment?: any }> {
+  async analyzeSentiment(text: string, model: string = "gemini-2.5-pro"): Promise<GeminiResponse & { sentiment?: any }> {
     try {
       const systemPrompt = `You are a sentiment analysis expert. Analyze the sentiment of the following text and provide a rating from 1 to 5 stars and a confidence score between 0 and 1. Respond with JSON in this format: {"rating": number, "confidence": number, "sentiment": "positive/negative/neutral", "explanation": "brief explanation"}`;
 
-      // Return demo response if API key is not available
       if (!this.ai) {
         return {
           success: true,
           data: {
-            response: '{"rating": 3, "confidence": 0.8, "sentiment": "neutral", "explanation": "This is a demo sentiment analysis. Configure GEMINI_API_KEY for real analysis."}',
+            response: JSON.stringify({
+              rating: 3,
+              confidence: 0.8,
+              sentiment: "neutral",
+              explanation: "This is a demo sentiment analysis. Set up your GEMINI_API_KEY for real results.",
+            }),
             model,
-            usage: { promptTokenCount: 12, candidatesTokenCount: 18, totalTokenCount: 30 }
+            usage: { promptTokenCount: 12, candidatesTokenCount: 18, totalTokenCount: 30 },
           },
           sentiment: {
             rating: 3,
             confidence: 0.8,
             sentiment: "neutral",
-            explanation: "This is a demo sentiment analysis. Configure GEMINI_API_KEY for real analysis."
+            explanation: "This is a demo sentiment analysis. Set up your GEMINI_API_KEY for real results.",
           },
-          creator: this.creator
+          creator: this.creator,
         };
       }
 
@@ -302,66 +294,65 @@ export class GeminiService {
               rating: { type: "number" },
               confidence: { type: "number" },
               sentiment: { type: "string" },
-              explanation: { type: "string" }
+              explanation: { type: "string" },
             },
-            required: ["rating", "confidence", "sentiment", "explanation"]
-          }
+            required: ["rating", "confidence", "sentiment", "explanation"],
+          },
         },
-        contents: text
+        contents: text,
       });
 
       const rawJson = result.text;
-      
+
       if (rawJson) {
         const sentiment = JSON.parse(rawJson);
-        
+
         return {
           success: true,
           data: {
             response: `Sentiment: ${sentiment.sentiment} (${sentiment.rating}/5 stars, ${Math.round(sentiment.confidence * 100)}% confidence)\nExplanation: ${sentiment.explanation}`,
             model,
-            usage: result.usageMetadata
+            usage: result.usageMetadata,
           },
           sentiment,
-          creator: this.creator
+          creator: this.creator,
         };
       } else {
         throw new Error("Empty response from model");
       }
-
     } catch (error) {
-      console.error('Sentiment analysis error:', error);
+      console.error("Sentiment analysis error:", error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Sentiment analysis failed',
-        creator: this.creator
+        error: "Couldn’t analyze the sentiment. Want to try again?",
+        creator: this.creator,
       };
     }
   }
 
-  async generateImage(prompt: string, imagePath?: string): Promise<GeminiImageResponse> {
+  async generateImage(prompt: string): Promise<GeminiImageResponse> {
     try {
       if (!prompt?.trim()) {
         return {
           success: false,
-          error: 'Image prompt is required',
-          creator: this.creator
+          error: "I need a prompt to generate an image. What do you want me to create?",
+          creator: this.creator,
         };
       }
 
       // Use the image generation model
-      const model = 'gemini-2.0-flash-preview-image-generation';
+      const model = "gemini-2.5-flash-preview-image-generation";
 
       // Return demo response if API key is not available
       if (!this.ai) {
         return {
           success: true,
           data: {
-            imagePath: '/demo/generated-image.jpg',
-            description: 'This is a demo image generation response. To generate real images, please configure your GEMINI_API_KEY environment variable.',
-            model
+            imageUrl: "https://placehold.co/600x400?text=Demo+Image",
+            description: "This is a demo image. Please set up your GEMINI_API_KEY to generate real images.",
+            model,
           },
-          creator: this.creator
+          creator: this.creator,
         };
       }
 
@@ -369,154 +360,112 @@ export class GeminiService {
         model,
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         config: {
-          responseModalities: [Modality.TEXT, Modality.IMAGE]
-        }
+          responseModalities: [Modality.TEXT, Modality.IMAGE],
+        },
       });
 
       const candidates = result.candidates;
       if (!candidates || candidates.length === 0) {
-        throw new Error('No image generated');
+        throw new Error("No image generated");
       }
 
       const content = candidates[0].content;
       if (!content || !content.parts) {
-        throw new Error('No content parts in response');
+        throw new Error("No content parts in response");
       }
 
-      let generatedImagePath: string | null = null;
-      let description = '';
+      let imageUrl: string = "https://placehold.co/600x400?text=Image+Generation+Failed";
+      let description = "";
 
       for (const part of content.parts) {
         if (part.text) {
-          description += part.text + ' ';
+          description += part.text + " ";
         } else if (part.inlineData && part.inlineData.data) {
           const imageData = part.inlineData.data;
-          
-          // Generate public URL for the image
-          let imageUrl: string | null = null;
-          try {
-            // Try multiple image hosting services in order of preference
-            imageUrl = await this.uploadToImageHost(imageData);
-          } catch (uploadError) {
-            console.warn('Failed to upload to image hosting services:', uploadError);
-          }
-          
-          // Always provide a local URL as fallback
-          if (!imageUrl) {
-            const timestamp = Date.now();
-            const filename = `gemini-generated-${timestamp}.png`;
-            imageUrl = `http://localhost:5000/attached_assets/generated_images/${filename}`;
-          }
-          
-          // Fallback: Save locally as backup
-          const imageBuffer = Buffer.from(imageData, "base64");
-          const imagesDir = path.join(process.cwd(), 'attached_assets', 'generated_images');
-          if (!fs.existsSync(imagesDir)) {
-            fs.mkdirSync(imagesDir, { recursive: true });
-          }
-          
-          const timestamp = Date.now();
-          let filename = imagePath || `gemini-generated-${timestamp}.png`;
-          filename = path.basename(filename);
-          if (!filename.match(/\.(png|jpg|jpeg|gif|webp)$/i)) {
-            filename = `gemini-generated-${timestamp}.png`;
-          }
-          const fullPath = path.join(imagesDir, filename);
-          
-          fs.writeFileSync(fullPath, imageBuffer);
-          generatedImagePath = path.join('attached_assets', 'generated_images', filename);
-          
-          // Store the URL for return
-          if (imageUrl) {
-            (this as any).lastGeneratedImageUrl = imageUrl;
-          }
+          // Upload image to hosting service
+          imageUrl = await this.uploadToImageHost(imageData);
         }
       }
 
-      if (!generatedImagePath) {
-        throw new Error('No image data found in response');
-      }
-
-      const imageUrl = (this as any).lastGeneratedImageUrl;
-      
       return {
         success: true,
         data: {
-          imagePath: generatedImagePath,
-          imageUrl: imageUrl || undefined,
-          description: description.trim() || 'Generated image',
-          model
+          imageUrl,
+          description: description.trim() || "Generated image based on your prompt",
+          model,
         },
-        creator: this.creator
+        creator: this.creator,
       };
-
     } catch (error) {
-      console.error('Image generation error:', error);
+      console.error("Image generation error:", error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Image generation failed',
-        creator: this.creator
+        error: "Couldn’t generate the image. Try a different prompt?",
+        creator: this.creator,
       };
     }
   }
 
   async getAvailableModels(): Promise<{ success: boolean; data?: ModelInfo[]; error?: string; creator: string }> {
     try {
-      // Static list of available models with descriptions
       const modelsList: ModelInfo[] = [
         {
-          name: 'gemini-2.5-flash',
-          description: 'Fast, versatile performance across a diverse variety of tasks',
-          capabilities: ['Text Generation', 'Code Generation', 'Question Answering', 'Summarization'],
+          name: "gemini-2.5-flash",
+          description: "Great for quick and versatile tasks like answering questions or generating text",
+          capabilities: ["Text Generation", "Code Generation", "Question Answering", "Summarization"],
           inputTokenLimit: 1048576,
-          outputTokenLimit: 8192
+          outputTokenLimit: 8192,
         },
         {
-          name: 'gemini-2.5-pro',
-          description: 'Complex reasoning tasks requiring more intelligence',
-          capabilities: ['Complex Analysis', 'Code Generation', 'Math Problem Solving', 'Creative Writing'],
+          name: "gemini-2.5-pro",
+          description: "Perfect for complex tasks requiring deeper reasoning",
+          capabilities: ["Complex Analysis", "Code Generation", "Math Problem Solving", "Creative Writing"],
           inputTokenLimit: 2097152,
-          outputTokenLimit: 8192
+          outputTokenLimit: 8192,
         },
         {
-          name: 'gemini-2.0-flash-preview',
-          description: 'Latest preview model with enhanced capabilities',
-          capabilities: ['Text Generation', 'Multimodal Understanding', 'Advanced Reasoning'],
+          name: "gemini-2.5-flash-preview",
+          description: "Preview model with enhanced multimodal capabilities",
+          capabilities: ["Text Generation", "Multimodal Understanding", "Advanced Reasoning"],
           inputTokenLimit: 1048576,
-          outputTokenLimit: 8192
+          outputTokenLimit: 8192,
         },
         {
-          name: 'gemini-2.0-flash-preview-image-generation',
-          description: 'Preview model capable of generating images from text prompts',
-          capabilities: ['Image Generation', 'Text Generation', 'Multimodal Output'],
+          name: "gemini-2.5-flash-preview-image-generation",
+          description: "Preview model for generating images from text prompts",
+          capabilities: ["Image Generation", "Text Generation", "Multimodal Output"],
           inputTokenLimit: 1048576,
-          outputTokenLimit: 8192
-        }
+          outputTokenLimit: 8192,
+        },
       ];
 
       return {
         success: true,
         data: modelsList,
-        creator: this.creator
+        creator: this.creator,
       };
-
     } catch (error) {
       return {
         success: false,
-        error: 'Failed to get available models',
-        creator: this.creator
+        error: "Couldn’t fetch the list of models. Try again later?",
+        creator: this.creator,
       };
     }
   }
 
   getStatus() {
     return {
-      service: 'Gemini AI Service',
-      models: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash-preview', 'gemini-2.0-flash-preview-image-generation'],
-      features: ['Chat', 'Image Chat', 'Text Summarization', 'Sentiment Analysis', 'Image Generation'],
+      service: "Gemini AI Service",
+      models: [
+        "gemini-2.5-flash",
+        "gemini-2.5-pro",
+        "gemini-2.5-flash-preview",
+        "gemini-2.5-flash-preview-image-generation",
+      ],
+      features: ["Chat", "Image Chat", "Text Summarization", "Sentiment Analysis", "Image Generation"],
       ready: !!this.apiKey,
       demoMode: !this.apiKey,
-      creator: this.creator
+      creator: this.creator,
     };
   }
 }
