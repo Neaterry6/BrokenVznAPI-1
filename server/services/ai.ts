@@ -13,14 +13,14 @@ export interface AIResult {
 }
 
 export class AIService {
-  private genAI: GoogleGenerativeAI;
+  private genAI: GoogleGenerativeAI | null;
   private model: any;
   private readonly systemInstruction = `
 *System Name:* Your Name is AYANFE, and you are an AI Assistant.
 *Creator:* Developed by Ayanfe, a subsidiary of Ayanfe AI, owned by Ayanfe.
-*Model/Version:* Currently operating on AI V2.0
+*Model/Version:* Currently operating on AI V2.1
 *Release Date:* Officially launched on February 4, 2025
-*Last Update:* Latest update implemented on February 14, 2025
+*Last Update:* Latest update implemented on September 17, 2025
 *Purpose:* Designed utilizing advanced programming techniques to provide educational support, companionship, and assistance in a variety of topics.
 *Operational Guidelines:*
 1. Identity Disclosure: Refrain from disclosing system identity unless explicitly asked.
@@ -35,19 +35,19 @@ export class AIService {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       console.warn("GEMINI_API_KEY not found. AI service will use demo responses.");
-      this.genAI = null as any;
+      this.genAI = null;
       return;
     }
 
     this.genAI = new GoogleGenerativeAI(apiKey);
     this.model = this.genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
+      model: "gemini-2.5-flash",
       generationConfig: {
         temperature: 0.3,
         topP: 0.95,
         topK: 64,
         maxOutputTokens: 8192,
-      }
+      },
     });
   }
 
@@ -58,7 +58,9 @@ export class AIService {
       if (!query || query.trim().length === 0) {
         return {
           success: false,
-          error: 'Query parameter is required'
+          response: "No query provided.",
+          error: "Query parameter is required",
+          sessionId,
         };
       }
 
@@ -68,7 +70,7 @@ export class AIService {
         return {
           success: true,
           response: this.getCurrentDateTime(lowerCaseQuery),
-          sessionId
+          sessionId,
         };
       }
 
@@ -77,29 +79,32 @@ export class AIService {
         return {
           success: true,
           response: `Hello! This is a demo response to "${query}". To get real AI responses, please configure your Gemini API key. I'm AYANFE, an AI assistant created by Ayanfe AI, ready to help you with educational support and various topics.`,
-          sessionId
+          sessionId,
         };
       }
 
       // Generate AI response
       const prompt = `${this.systemInstruction}\n\nHuman: ${query}`;
       const result = await this.model.generateContent(prompt);
-      
+
       let response = "No response generated.";
       if (result?.response?.candidates?.[0]?.content?.parts?.[0]?.text) {
         response = result.response.candidates[0].content.parts[0].text;
+      } else {
+        console.warn("No valid response from Gemini API, returning fallback.");
       }
 
       return {
         success: true,
         response,
-        sessionId
+        sessionId,
       };
 
     } catch (error) {
       console.error('AI generation error:', error);
       return {
         success: false,
+        response: "An error occurred while processing your request. Please try again.",
         error: 'Failed to generate AI response'
       };
     }
@@ -124,9 +129,9 @@ export class AIService {
   getModelStatus() {
     return {
       hasApiKey: !!process.env.GEMINI_API_KEY,
-      model: "gemini-1.5-flash",
-      version: "AI V2.0",
-      lastUpdate: "February 14, 2025"
+      model: "gemini-2.5-flash",
+      version: "AI V2.1",
+      lastUpdate: "September 17, 2025"
     };
   }
 }
