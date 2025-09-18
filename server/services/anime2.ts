@@ -1,6 +1,7 @@
 import axios from 'axios';
+import * as cheerio from 'cheerio';
+import YTDlpWrap from 'yt-dlp-wrap';
 
-// Types for AniList API
 export interface AniListMedia {
   id: number;
   title: {
@@ -17,6 +18,8 @@ export interface AniListMedia {
     large: string;
   };
   description: string;
+  popularity?: number;
+  startDate?: { year: number; month: number; day: number };
 }
 
 export interface GogoAnimeData {
@@ -24,7 +27,7 @@ export interface GogoAnimeData {
   title?: string;
   url?: string;
   image?: string;
-  episodes?: any[];
+  episodes?: Array<{ id: string; number: number; url: string }>;
   totalEpisodes?: number;
   error?: string;
 }
@@ -46,6 +49,8 @@ export interface AnimeSearchResult {
   };
   description: string;
   gogoanime: GogoAnimeData;
+  views?: number;
+  published?: string;
 }
 
 export interface Anime2SearchResult {
@@ -60,7 +65,7 @@ export interface Anime2SearchResult {
 export interface WatchLinksResult {
   success: boolean;
   status: string;
-  data?: any;
+  data?: Array<{ quality: string; url: string; server: string; type: 'mp4' | 'hls' | 'm3u8' }>;
   error?: string;
   creator: string;
 }
@@ -71,8 +76,9 @@ export class Anime2Service {
   private aniListUrl = 'https://graphql.anilist.co';
   private aniListToken: string | null = null;
   private creator = 'heisbroken';
+  private userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36';
+  private ytDlpWrap: YTDlpWrap;
 
-  // AniList GraphQL query for search with filters
   private readonly aniListQuery = `
     query ($search: String, $seasonYear: Int, $format: MediaFormat, $genre_in: [String], $perPage: Int) {
       Page(perPage: $perPage) {
@@ -83,95 +89,156 @@ export class Anime2Service {
           hasNextPage
           perPage
         }
-        media(search: $search, seasonYear: $seasonYear, format: $format, genre_in: $genre_in, type: ANIME) {
+        media(search: $search, seasonYear: $seasonYear, format: $format, genre_in: $genre_in, type: ANIME, isAdult: false) {
           id
-          title {
-            romaji
-            english
-            native
-          }
+          title { romaji english native }
           episodes
           status
           seasonYear
           format
           genres
-          coverImage {
-            large
-          }
+          coverImage { large }
           description
+          popularity
+          startDate { year month day }
         }
       }
     }
   `;
 
   constructor() {
-    // Use environment variables for secure credential handling
-    this.clientId = process.env.ANILIST_CLIENT_ID || '29927';
-    this.clientSecret = process.env.ANILIST_CLIENT_SECRET || 'BZ8VvmydJbCfeU3uwFd4dRuj4BDlt7xDHfSI0sbJ';
-    
-    // Initialize token fetch
-    this.initializeToken();
-    
-    // Refresh token every 50 minutes (AniList tokens last 1 hour)
-    setInterval(() => {
-      this.getAniListToken();
-    }, 50 * 60 * 1000);
+    this.clientId = process.env.ANILIST_CLIENT_ID || '';
+    this.clientSecret = process.env.ANILIST_CLIENT_SECRET || '';
+    this.ytDlpWrap = new YTDlpWrap();
+
+    if (!this.clientId || !this.clientSecret) {
+      console.warn('AniList credentials missing; using public queries');
+    } else {
+      this.initializeToken();
+      setInterval(() => this.getAniListToken(), 50 * 60 * 1000);
+    }
+  }
+
+  // Legal disclaimer
+  private getLegalDisclaimer(): string {
+    return `
+    ⚠️ LEGAL DISCLAIMER ⚠️
+    This service is intended for legitimate, copyright-free content only.
+    Users are responsible for ensuring they have proper rights to access or download content.
+    Accessing copyrighted material without permission may violate terms of service and copyright laws.
+    `;
+  }
+
+  // Format published date
+  private formatPublishedDate(date: { year: number; month: number; day: number } | string): string {
+    if (!date) return 'Unknown';
+    const parsed = typeof date === 'string' ? new Date(date) : new Date(date.year, date.month - 1, date.day);
+    const now = new Date();
+    const diffYears = now.getFullYear() - parsed.getFullYear();
+    if (diffYears >= 1) return `${diffYears} year${diffYears > 1 ? 's' : ''} ago`;
+    const diffMonths = Math.floor((now.getTime() - parsed.getTime()) / (1000 * 60 * 60 * 24 * 30));
+    if (diffMonths >= 1) return `${diffMonths} month${diffMonths > 1 ? 's' : ''} ago`;
+    const diffDays = Math.floor((now.getTime() - parsed.getTime()) / (1000 * 60 * 60 * 24));
+    return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+  }
+
+  // Validate URL
+  private validateUrl(url: string): { valid: boolean; error?: string } {
+    try {
+      const urlObj = new URL(url);
+      const hostname = urlObj.hostname.toLowerCase();
+      const ip = urlObj.hostname;
+
+      const privateIPPatterns = [
+        /^127\./, /^10\./, /^172\.(1[6-9]|2[0-9]|3[01])\./, /^192\.168\./,
+        /^169\.254\./, /^::1$/, /^fc00:/, /^fe80:/
+      ];
+
+      if (privateIPPatterns.some(pattern => pattern.test(ip)) || ['localhost', '0.0.0.0'].includes(hostname)) {
+        return { valid: false, error: 'Access to private/internal networks is not allowed.' };
+      }
+
+      return { valid: true };
+    } catch {
+      return { valid: false, error: 'Invalid URL' };
+    }
+  }
+
+  private async getAniListToken(maxRetries = 3): Promise<void> {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await axios.post('https://anilist.co/api/v2/oauth/token', {
+          grant_type: 'client_credentials',
+          client_id: this.clientId,
+          client_secret: this.clientSecret,
+        }, {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 15000
+        });
+
+        if (response.data.access_token) {
+          this.aniListToken = response.data.access_token;
+          console.log('AniList token fetched successfully');
+          return;
+        }
+      } catch (error: any) {
+        console.error(`AniList token fetch attempt ${attempt} failed:`, error.message);
+        if (attempt === maxRetries) {
+          console.warn('Max retries reached; using public AniList queries');
+          this.aniListToken = null;
+        }
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+      }
+    }
   }
 
   private async initializeToken(): Promise<void> {
     await this.getAniListToken();
   }
 
-  // Fetch AniList OAuth token
-  private async getAniListToken(): Promise<void> {
+  private async fetchGogoAnimeData(title: string): Promise<GogoAnimeData> {
     try {
-      const response = await axios.post('https://anilist.co/api/v2/oauth/token', {
-        grant_type: 'client_credentials',
-        client_id: this.clientId,
-        client_secret: this.clientSecret,
-      }, {
-        headers: {
-          'Content-Type': 'application/json',
-        },
+      const cleanTitle = title.replace(/[^\w\s]/gi, '').trim();
+      const searchUrl = `https://9anime.to/search?keyword=${encodeURIComponent(cleanTitle)}`;
+      const response = await axios.get(searchUrl, {
+        headers: { 'User-Agent': this.userAgent },
         timeout: 15000
       });
 
-      if (!response.data.access_token) {
-        throw new Error('Failed to fetch AniList token');
-      }
+      const $ = cheerio.load(response.data);
+      const firstResult = $('.film-list .item a').first();
+      const url = firstResult.attr('href');
+      if (!url) return { error: 'No matching Gogoanime data' };
 
-      this.aniListToken = response.data.access_token;
-      console.log('AniList token fetched successfully for anime2 service');
-    } catch (error) {
-      console.error('AniList token fetch error:', error);
-      this.aniListToken = null;
-    }
-  }
+      const animeUrl = `https://9anime.to${url}`;
+      const animePage = await axios.get(animeUrl, { headers: { 'User-Agent': this.userAgent }, timeout: 15000 });
+      const $anime = cheerio.load(animePage.data);
 
-  // Fetch Gogoanime data for a single anime
-  private async fetchGogoAnimeData(title: string): Promise<GogoAnimeData> {
-    try {
-      // Clean title for better matching
-      const cleanTitle = title.replace(/[^\w\s]/gi, '').trim();
-      
-      const response = await axios.get(
-        `https://api.consumet.org/anime/gogoanime/${encodeURIComponent(cleanTitle)}`,
-        {
-          timeout: 10000,
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-          }
+      const id = url.split('/').pop();
+      const image = $anime('.film-poster img').attr('src');
+      const episodes: Array<{ id: string; number: number; url: string }> = [];
+      $anime('.episodes-ul a').each((_, el) => {
+        const epUrl = $anime(el).attr('href');
+        const epNumber = parseInt($anime(el).attr('data-number') || '0');
+        if (epUrl && epNumber) {
+          episodes.push({ id: `${id}-ep${epNumber}`, number: epNumber, url: `https://9anime.to${epUrl}` });
         }
-      );
+      });
 
-      return response.data || { error: 'No matching Gogoanime data' };
-    } catch (error) {
-      console.error(`Gogoanime fetch error for ${title}:`, error);
+      return {
+        id,
+        title: $anime('.film-title').text().trim() || cleanTitle,
+        url: animeUrl,
+        image,
+        episodes,
+        totalEpisodes: episodes.length
+      };
+    } catch (error: any) {
+      console.error(`Gogoanime fetch error for ${title}:`, error.message);
       return { error: 'Failed to fetch Gogoanime data' };
     }
   }
 
-  // Search anime with filters and attach Gogoanime data to all results
   async searchAnime(params: {
     title?: string;
     year?: string;
@@ -180,46 +247,36 @@ export class Anime2Service {
     limit?: string;
   }): Promise<Anime2SearchResult> {
     try {
-      if (!this.aniListToken) {
-        await this.getAniListToken();
-        if (!this.aniListToken) {
-          return {
-            success: false,
-            status: 'error',
-            error: 'Failed to authenticate with AniList',
-            creator: this.creator
-          };
-        }
-      }
-
       const variables = {
         search: params.title || null,
         seasonYear: params.year ? parseInt(params.year) : null,
-        format: params.format || null,
+        format: params.format?.toUpperCase() || null,
         genre_in: params.genre ? [params.genre] : null,
         perPage: params.limit ? parseInt(params.limit) : 10,
       };
 
-      // Fetch from AniList
-      const anilistResponse = await axios.post(
-        this.aniListUrl,
-        {
-          query: this.aniListQuery,
-          variables: variables,
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${this.aniListToken}`,
-          },
-          timeout: 15000
-        }
-      );
+      const headers: any = { 'Content-Type': 'application/json' };
+      if (this.aniListToken) headers['Authorization'] = `Bearer ${this.aniListToken}`;
 
-      const animeList: AniListMedia[] = anilistResponse.data?.data?.Page?.media || [];
-      const totalResults = anilistResponse.data?.data?.Page?.pageInfo?.total || 0;
+      const anilistResponse = await axios.post(this.aniListUrl, {
+        query: this.aniListQuery,
+        variables
+      }, { headers, timeout: 15000 });
 
-      if (animeList.length === 0) {
+      const pageData = anilistResponse.data?.data?.Page;
+      if (!pageData) {
+        return {
+          success: false,
+          status: 'error',
+          error: 'No data returned from AniList',
+          creator: this.creator
+        };
+      }
+
+      const animeList: AniListMedia[] = pageData.media || [];
+      const totalResults = pageData.pageInfo?.total || 0;
+
+      if (!animeList.length) {
         return {
           success: true,
           status: 'success',
@@ -229,15 +286,15 @@ export class Anime2Service {
         };
       }
 
-      // Fetch Gogoanime data for ALL results (not just the first one)
       const resultsWithGogo = await Promise.all(
         animeList.map(async (anime): Promise<AnimeSearchResult> => {
           const searchTitle = anime.title.romaji || anime.title.english || anime.title.native;
           const gogoData = await this.fetchGogoAnimeData(searchTitle);
-          
           return {
             ...anime,
             gogoanime: gogoData,
+            views: anime.popularity || 0,
+            published: this.formatPublishedDate(anime.startDate || '')
           };
         })
       );
@@ -249,136 +306,93 @@ export class Anime2Service {
         totalResults,
         creator: this.creator
       };
-
-    } catch (error) {
-      console.error('Anime2 search error:', error);
+    } catch (error: any) {
+      console.error('Anime2 search error:', error.message);
       return {
         success: false,
         status: 'error',
-        error: 'Failed to search anime',
+        error: `Failed to search anime: ${error.message || 'Unknown error'}`,
         creator: this.creator
       };
     }
   }
 
-  // Get episode streaming/download links
   async getWatchLinks(episodeId: string): Promise<WatchLinksResult> {
     try {
       if (!episodeId) {
-        return {
-          success: false,
-          status: 'error',
-          error: 'Episode ID is required',
-          creator: this.creator
-        };
+        return { success: false, status: 'error', error: 'Episode ID is required', creator: this.creator };
       }
 
-      const response = await axios.get(
-        `https://api.consumet.org/anime/gogoanime/watch/${episodeId}`,
-        {
-          timeout: 15000,
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-          }
-        }
-      );
+      const validation = this.validateUrl(`https://9anime.to/watch/${episodeId}`);
+      if (!validation.valid) {
+        return { success: false, status: 'error', error: validation.error, creator: this.creator };
+      }
+
+      const args = ['--get-url', '--format', 'best[ext=mp4]/best[ext=m3u8]/best', `https://9anime.to/watch/${episodeId}`];
+      const streamUrl = await this.ytDlpWrap.execPromise(args, { timeout: 30000 });
 
       return {
         success: true,
         status: 'success',
-        data: response.data,
+        data: [{
+          quality: '720p', // Default, as yt-dlp doesn't always provide quality
+          url: streamUrl.trim(),
+          server: '9anime',
+          type: streamUrl.includes('.m3u8') ? 'm3u8' : 'mp4'
+        }],
         creator: this.creator
       };
-
-    } catch (error) {
-      console.error('Watch links fetch error:', error);
+    } catch (error: any) {
+      console.error('Watch links fetch error:', error.message);
       return {
         success: false,
         status: 'error',
-        error: 'Could not fetch episode links',
+        error: `Could not fetch episode links: ${error.message || 'Unknown error'}`,
         creator: this.creator
       };
     }
   }
 
-  // Get detailed anime information
   async getAnimeDetails(anilistId: string): Promise<Anime2SearchResult> {
     try {
-      if (!this.aniListToken) {
-        await this.getAniListToken();
-        if (!this.aniListToken) {
-          return {
-            success: false,
-            status: 'error',
-            error: 'Failed to authenticate with AniList',
-            creator: this.creator
-          };
-        }
+      if (!anilistId || isNaN(parseInt(anilistId))) {
+        return { success: false, status: 'error', error: 'Valid AniList ID is required', creator: this.creator };
       }
 
       const detailQuery = `
         query ($id: Int) {
           Media(id: $id, type: ANIME) {
             id
-            title {
-              romaji
-              english
-              native
-            }
+            title { romaji english native }
             episodes
             status
             seasonYear
             format
             genres
-            coverImage {
-              large
-            }
+            coverImage { large }
             description
             duration
-            studios {
-              nodes {
-                name
-              }
-            }
-            relations {
-              edges {
-                node {
-                  title {
-                    romaji
-                  }
-                }
-              }
-            }
+            popularity
+            startDate { year month day }
+            studios { nodes { name } }
+            relations { edges { node { title { romaji } } } }
           }
         }
       `;
 
-      const response = await axios.post(
-        this.aniListUrl,
-        {
-          query: detailQuery,
-          variables: { id: parseInt(anilistId) },
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${this.aniListToken}`,
-          },
-          timeout: 15000
-        }
-      );
+      const headers: any = { 'Content-Type': 'application/json' };
+      if (this.aniListToken) headers['Authorization'] = `Bearer ${this.aniListToken}`;
+
+      const response = await axios.post(this.aniListUrl, {
+        query: detailQuery,
+        variables: { id: parseInt(anilistId) }
+      }, { headers, timeout: 15000 });
 
       const anime = response.data?.data?.Media;
       if (!anime) {
-        return {
-          success: false,
-          status: 'error',
-          error: 'Anime not found',
-          creator: this.creator
-        };
+        return { success: false, status: 'error', error: 'Anime not found', creator: this.creator };
       }
 
-      // Fetch Gogoanime data for the anime
       const searchTitle = anime.title.romaji || anime.title.english || anime.title.native;
       const gogoData = await this.fetchGogoAnimeData(searchTitle);
 
@@ -388,32 +402,32 @@ export class Anime2Service {
         results: [{
           ...anime,
           gogoanime: gogoData,
+          views: anime.popularity || 0,
+          published: this.formatPublishedDate(anime.startDate || '')
         }],
         creator: this.creator
       };
-
-    } catch (error) {
-      console.error('Anime details fetch error:', error);
+    } catch (error: any) {
+      console.error('Anime details fetch error:', error.message);
       return {
         success: false,
         status: 'error',
-        error: 'Failed to fetch anime details',
+        error: `Failed to fetch anime details: ${error.message || 'Unknown error'}`,
         creator: this.creator
       };
     }
   }
 
-  // Get service status
-  getStatus(): { success: boolean; status: string; tokenStatus: string; creator: string } {
+  getStatus(): { success: boolean; status: string; tokenStatus: string; creator: string; disclaimer: string } {
     return {
       success: true,
       status: 'online',
-      tokenStatus: this.aniListToken ? 'authenticated' : 'not authenticated',
-      creator: this.creator
+      tokenStatus: this.aniListToken ? 'authenticated' : 'using public queries',
+      creator: this.creator,
+      disclaimer: this.getLegalDisclaimer()
     };
   }
 
-  // Get available formats for filtering
   getFormats(): { success: boolean; formats: string[]; creator: string } {
     return {
       success: true,
@@ -422,14 +436,13 @@ export class Anime2Service {
     };
   }
 
-  // Get popular genres for filtering
   getGenres(): { success: boolean; genres: string[]; creator: string } {
     return {
       success: true,
       genres: [
-        'Action', 'Adventure', 'Comedy', 'Drama', 'Ecchi', 'Fantasy', 
+        'Action', 'Adventure', 'Comedy', 'Drama', 'Ecchi', 'Fantasy',
         'Horror', 'Mahou Shoujo', 'Mecha', 'Music', 'Mystery', 'Psychological',
-        'Romance', 'Sci-Fi', 'Slice of Life', 'Sports', 'Supernatural', 
+        'Romance', 'Sci-Fi', 'Slice of Life', 'Sports', 'Supernatural',
         'Thriller', 'Military', 'Historical'
       ],
       creator: this.creator
