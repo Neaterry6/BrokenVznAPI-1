@@ -1,23 +1,6 @@
-import { spawn } from 'child_process';
+import YTDlpWrap from 'yt-dlp-wrap';
 import fs from 'fs';
 import path from 'path';
-import crypto from 'crypto';
-
-// Secure cookie management - cookies should be provided via environment variables or secure storage
-const getCookiesPath = (): string | null => {
-  const cookiesEnv = process.env.YOUTUBE_COOKIES_PATH;
-  if (cookiesEnv && fs.existsSync(cookiesEnv)) {
-    return cookiesEnv;
-  }
-  
-  // Fallback to user-provided cookies file if it exists
-  const userCookiesPath = path.join(process.cwd(), 'youtube-cookies.txt');
-  if (fs.existsSync(userCookiesPath)) {
-    return userCookiesPath;
-  }
-  
-  return null;
-};
 
 interface VideoData {
   title: string;
@@ -25,6 +8,7 @@ interface VideoData {
   duration: string;
   views: number;
   published: string;
+  thumbnail: string;
 }
 
 interface KaizYouTubeResponse {
@@ -35,7 +19,7 @@ interface KaizYouTubeResponse {
     video_url: string;
     thumbnail: string;
     duration: string;
-    views: string;
+    views: number;
     published: string;
     download_url: string;
   };
@@ -45,141 +29,116 @@ interface KaizYouTubeResponse {
 export class KaizYouTubeService {
   private creator = 'broken Vzn';
   private cookiesPath: string | null;
+  private ytDlpWrap: YTDlpWrap;
 
   constructor() {
-    this.cookiesPath = getCookiesPath();
+    this.cookiesPath = this.getCookiesPath();
+    this.ytDlpWrap = new YTDlpWrap();
   }
 
-  // Secure argument escaping to prevent command injection
-  private escapeShellArg(arg: string): string {
-    // Remove any potentially dangerous characters and escape properly
-    return arg.replace(/[^\\w\\s\\-\\.\\_\\:]/g, '').trim();
-  }
-
-  // Secure yt-dlp execution using spawn to prevent command injection
-  private executeYtDlp(args: string[]): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const process = spawn('yt-dlp', args, {
-        stdio: ['ignore', 'pipe', 'pipe']
-      });
-
-      let stdout = '';
-      let stderr = '';
-
-      process.stdout?.on('data', (data) => {
-        stdout += data.toString();
-      });
-
-      process.stderr?.on('data', (data) => {
-        stderr += data.toString();
-      });
-
-      process.on('close', (code) => {
-        if (code === 0) {
-          resolve(stdout.trim());
-        } else {
-          reject(new Error(`yt-dlp exited with code ${code}: ${stderr}`));
-        }
-      });
-
-      process.on('error', (error) => {
-        reject(new Error(`Failed to spawn yt-dlp: ${error.message}`));
-      });
-    });
-  }
-
-  // 🔧 Generate actual download URL using yt-dlp
-  private async getDownloadUrl(videoId: string): Promise<string | null> {
-    try {
-      const args = [
-        '--quiet',
-        '--get-url',
-        '--format', 'best[ext=mp4]/best',
-        `https://youtube.com/watch?v=${this.escapeShellArg(videoId)}`
-      ];
-
-      if (this.cookiesPath) {
-        args.push('--cookies', this.cookiesPath);
-      }
-
-      return await this.executeYtDlp(args);
-    } catch (error) {
-      console.error('Failed to get download URL:', error);
-      return null;
+  // Secure cookie management
+  private getCookiesPath(): string | null {
+    const cookiesEnv = process.env.YOUTUBE_COOKIES_PATH;
+    if (cookiesEnv && fs.existsSync(cookiesEnv)) {
+      return cookiesEnv;
     }
+    const userCookiesPath = path.join(process.cwd(), 'youtube-cookies.txt');
+    if (fs.existsSync(userCookiesPath)) {
+      return userCookiesPath;
+    }
+    return null;
   }
 
-  // 🔍 Search YouTube and extract metadata using yt-dlp with secure execution
-  private async getVideoData(query: string): Promise<VideoData | null> {
+  // Format duration from seconds to MM:SS
+  private formatDuration(seconds: number): string {
+    if (!seconds || isNaN(seconds)) return '0:00';
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  }
+
+  // Format published date to relative time
+  private formatPublishedDate(uploadDate: string): string {
+    if (!uploadDate) return 'Unknown';
+    const date = new Date(uploadDate);
+    const now = new Date();
+    const diffYears = now.getFullYear() - date.getFullYear();
+    if (diffYears >= 1) {
+      return `${diffYears} year${diffYears > 1 ? 's' : ''} ago`;
+    }
+    const diffMonths = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24 * 30));
+    if (diffMonths >= 1) {
+      return `${diffMonths} month${diffMonths > 1 ? 's' : ''} ago`;
+    }
+    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+    return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+  }
+
+  // Get video metadata using yt-dlp
+  private async getVideoData(query: string, cookies?: string): Promise<VideoData | null> {
     try {
-      const escapedQuery = this.escapeShellArg(query);
-      
       const args = [
         '--quiet',
         '--skip-download',
         '--dump-json',
         '--default-search', 'ytsearch1:',
-        '--format', 'best[ext=mp4]/best',
-        escapedQuery
+        query
       ];
 
       if (this.cookiesPath) {
         args.push('--cookies', this.cookiesPath);
+      } else if (cookies) {
+        args.push('--cookies-from-browser', `youtube:${cookies}`);
       }
 
-      const output = await this.executeYtDlp(args);
-      const lines = output.split('\\n');
-      
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        
-        try {
-          const data = JSON.parse(line);
-          if (data.id && data.title) {
-            const duration = data.duration || 0;
-            const durationFormatted = `${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, '0')}`;
-            
-            // Format the upload date more accurately
-            let published = "Unknown";
-            if (data.upload_date) {
-              const date = new Date(
-                parseInt(data.upload_date.substring(0, 4)),
-                parseInt(data.upload_date.substring(4, 6)) - 1,
-                parseInt(data.upload_date.substring(6, 8))
-              );
-              const now = new Date();
-              const diffTime = Math.abs(now.getTime() - date.getTime());
-              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-              
-              if (diffDays < 365) {
-                published = `${Math.floor(diffDays / 30)} months ago`;
-              } else {
-                published = `${Math.floor(diffDays / 365)} years ago`;
-              }
-            }
-            
-            return {
-              title: data.title,
-              video_id: data.id,
-              duration: durationFormatted,
-              views: data.view_count || 0,
-              published
-            };
-          }
-        } catch (parseError) {
-          continue; // Skip invalid JSON lines
-        }
+      const output = await this.ytDlpWrap.execPromise(args, { timeout: 30000 });
+      const data = JSON.parse(output);
+
+      if (!data.id || !data.title) {
+        return null;
       }
-      
+
+      return {
+        title: data.title,
+        video_id: data.id,
+        duration: this.formatDuration(data.duration || 0),
+        views: data.view_count || 0,
+        published: this.formatPublishedDate(data.upload_date || ''),
+        thumbnail: data.thumbnail || `https://i.ytimg.com/vi/${data.id}/hq720.jpg`
+      };
+    } catch (error: any) {
+      console.error('[yt-dlp error]', error.message);
       return null;
-    } catch (error) {
-      console.error('[yt-dlp error]', error);
+    }
+  }
+
+  // Get download/stream URL using yt-dlp
+  private async getDownloadUrl(videoId: string, format: 'video' | 'audio', cookies?: string): Promise<string | null> {
+    try {
+      const args = [
+        '--quiet',
+        '--get-url',
+        format === 'video' ? '--format' : '--format',
+        format === 'video' ? 'best[ext=mp4]/best' : 'bestaudio[ext=m4a]/bestaudio',
+        `https://youtube.com/watch?v=${videoId}`
+      ];
+
+      if (this.cookiesPath) {
+        args.push('--cookies', this.cookiesPath);
+      } else if (cookies) {
+        args.push('--cookies-from-browser', `youtube:${cookies}`);
+      }
+
+      const downloadUrl = await this.ytDlpWrap.execPromise(args, { timeout: 30000 });
+      return downloadUrl.trim();
+    } catch (error: any) {
+      console.error('Failed to get download URL:', error.message);
       return null;
     }
   }
 
   // 🎬 /video?query=... — full video metadata
-  async getVideo(query: string): Promise<KaizYouTubeResponse> {
+  async getVideo(query: string, cookies?: string): Promise<KaizYouTubeResponse> {
     if (!query || !query.trim()) {
       return {
         creator: this.creator,
@@ -188,7 +147,7 @@ export class KaizYouTubeService {
       };
     }
 
-    const videoData = await this.getVideoData(query);
+    const videoData = await this.getVideoData(query, cookies);
     if (!videoData) {
       return {
         creator: this.creator,
@@ -198,8 +157,7 @@ export class KaizYouTubeService {
     }
 
     const videoUrl = `https://youtube.com/watch?v=${videoData.video_id}`;
-    const thumbnail = `https://i.ytimg.com/vi/${videoData.video_id}/hq720.jpg`;
-    const downloadUrl = await this.getDownloadUrl(videoData.video_id) || 'Download not available';
+    const downloadUrl = await this.getDownloadUrl(videoData.video_id, 'video', cookies) || 'Download not available';
 
     return {
       creator: this.creator,
@@ -207,17 +165,17 @@ export class KaizYouTubeService {
       result: {
         title: videoData.title,
         video_url: videoUrl,
-        thumbnail: thumbnail,
+        thumbnail: videoData.thumbnail,
         duration: videoData.duration,
-        views: videoData.views.toString(),
+        views: videoData.views,
         published: videoData.published,
         download_url: downloadUrl
       }
     };
   }
 
-  // 🎧 /play?query=... — same format as /video
-  async getPlay(query: string): Promise<KaizYouTubeResponse> {
+  // 🎧 /play?query=... — audio-optimized metadata
+  async getPlay(query: string, cookies?: string): Promise<KaizYouTubeResponse> {
     if (!query || !query.trim()) {
       return {
         creator: this.creator,
@@ -226,7 +184,7 @@ export class KaizYouTubeService {
       };
     }
 
-    const videoData = await this.getVideoData(query);
+    const videoData = await this.getVideoData(query, cookies);
     if (!videoData) {
       return {
         creator: this.creator,
@@ -236,8 +194,7 @@ export class KaizYouTubeService {
     }
 
     const videoUrl = `https://youtube.com/watch?v=${videoData.video_id}`;
-    const thumbnail = `https://i.ytimg.com/vi/${videoData.video_id}/hq720.jpg`;
-    const downloadUrl = await this.getDownloadUrl(videoData.video_id) || 'Download not available';
+    const downloadUrl = await this.getDownloadUrl(videoData.video_id, 'audio', cookies) || 'Stream not available';
 
     return {
       creator: this.creator,
@@ -245,9 +202,9 @@ export class KaizYouTubeService {
       result: {
         title: videoData.title,
         video_url: videoUrl,
-        thumbnail: thumbnail,
+        thumbnail: videoData.thumbnail,
         duration: videoData.duration,
-        views: videoData.views.toString(),
+        views: videoData.views,
         published: videoData.published,
         download_url: downloadUrl
       }
