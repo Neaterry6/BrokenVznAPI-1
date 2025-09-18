@@ -1,5 +1,6 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
+import YTDlpWrap from 'yt-dlp-wrap';
 
 export interface AppDownloadRequest {
   packageName?: string;
@@ -54,11 +55,20 @@ export interface AppDownloadResult {
 
 export class AppDownloadService {
   private creator = '@BrokenVZN';
-  private userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+  private userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36';
+  private ytDlpWrap: YTDlpWrap;
 
-  // Get APK download from APKPure
+  constructor() {
+    this.ytDlpWrap = new YTDlpWrap();
+  }
+
+  // Get APK from APKPure
   async getAPKFromAPKPure(packageName: string): Promise<AppDownloadResult> {
     try {
+      if (!packageName) {
+        return { success: false, error: 'Package name is required', creator: this.creator };
+      }
+
       const searchUrl = `https://apkpure.com/search?q=${encodeURIComponent(packageName)}`;
       const response = await axios.get(searchUrl, {
         headers: { 'User-Agent': this.userAgent },
@@ -66,8 +76,7 @@ export class AppDownloadService {
       });
 
       const $ = cheerio.load(response.data);
-      const firstResult = $('.dd .ae').first().attr('href');
-      
+      const firstResult = $('div.ver-item a.ver-item-n').first().attr('href');
       if (!firstResult) {
         throw new Error('App not found on APKPure');
       }
@@ -79,21 +88,27 @@ export class AppDownloadService {
       });
 
       const appPage$ = cheerio.load(appPageResponse.data);
-      
+      const downloadLink = appPage$('a[href*="/download/"]').attr('href');
+      let directDownloadUrl = '';
+      if (downloadLink) {
+        directDownloadUrl = await this.getDirectAPKUrl(downloadLink);
+      }
+
       const appInfo: AppDownloadInfo = {
-        appName: appPage$('.info h1').text().trim(),
-        packageName: packageName,
-        version: appPage$('.details-sdk span').first().text().trim(),
+        appName: appPage$('h1').text().trim() || 'Unknown App',
+        packageName,
+        version: appPage$('.detail_appinfo_version').text().trim() || 'Latest',
         platform: 'android',
         downloadUrl: appPageUrl,
-        directDownloadUrl: appPage$('.download-btn').attr('href') || '',
-        fileSize: appPage$('.details-sdk .det:contains("Size")').text().replace('Size:', '').trim(),
-        developer: appPage$('.details-author a').text().trim(),
-        description: appPage$('.describe p').text().trim(),
-        icon: appPage$('.icon img').attr('src') || '',
-        rating: parseFloat(appPage$('.rating .score').text().trim()) || 0,
-        downloads: appPage$('.downloads-title').text().trim(),
-        lastUpdated: appPage$('.update-on').text().replace('Updated on:', '').trim()
+        directDownloadUrl: directDownloadUrl || '',
+        fileSize: appPage$('.detail_appinfo_size').text().trim() || 'N/A',
+        developer: appPage$('.detail_author').text().trim() || 'Unknown',
+        description: appPage$('.description_content').text().trim() || '',
+        icon: appPage$('.detail_icon img').attr('src') || '',
+        screenshots: appPage$('.swiper-slide img').map((_, el) => appPage$(el).attr('src') || '').get(),
+        rating: parseFloat(appPage$('.detail_rating .score').text().trim()) || 0,
+        downloads: appPage$('.detail_downloads').text().trim() || '0',
+        lastUpdated: appPage$('.detail_updated').text().replace('Updated:', '').trim() || ''
       };
 
       return {
@@ -101,19 +116,23 @@ export class AppDownloadService {
         data: appInfo,
         creator: this.creator
       };
-
-    } catch (error) {
+    } catch (error: any) {
+      console.error('APKPure error:', error.message);
       return {
         success: false,
-        error: 'Failed to fetch app from APKPure',
+        error: `Failed to fetch app from APKPure: ${error.message || 'Unknown error'}`,
         creator: this.creator
       };
     }
   }
 
-  // Get APK download from APKMirror
+  // Get APK from APKMIRROR
   async getAPKFromAPKMirror(packageName: string): Promise<AppDownloadResult> {
     try {
+      if (!packageName) {
+        return { success: false, error: 'Package name is required', creator: this.creator };
+      }
+
       const searchUrl = `https://www.apkmirror.com/?s=${encodeURIComponent(packageName)}&post_type=app_release&searchtype=apk`;
       const response = await axios.get(searchUrl, {
         headers: { 'User-Agent': this.userAgent },
@@ -121,22 +140,39 @@ export class AppDownloadService {
       });
 
       const $ = cheerio.load(response.data);
-      const firstResult = $('.listWidget .appRow .appRowTitle a').first().attr('href');
-      
+      const firstResult = $('.appRowTitle a').first().attr('href');
       if (!firstResult) {
-        throw new Error('App not found on APKMirror');
+        throw new Error('App not found on APKMIRROR');
+      }
+
+      const appPageUrl = `https://www.apkmirror.com${firstResult}`;
+      const appPageResponse = await axios.get(appPageUrl, {
+        headers: { 'User-Agent': this.userAgent },
+        timeout: 15000
+      });
+
+      const appPage$ = cheerio.load(appPageResponse.data);
+      const downloadLink = appPage$('.downloadLink').attr('href');
+      let directDownloadUrl = '';
+      if (downloadLink) {
+        directDownloadUrl = await this.getDirectAPKUrl(`https://www.apkmirror.com${downloadLink}`);
       }
 
       const appInfo: AppDownloadInfo = {
-        appName: $('.appRowTitle a').first().text().trim(),
-        packageName: packageName,
-        version: 'Latest',
+        appName: appPage$('.appRowTitle').text().trim() || 'Unknown App',
+        packageName,
+        version: appPage$('.infoSlide-value').eq(0).text().trim() || 'Latest',
         platform: 'android',
-        downloadUrl: `https://www.apkmirror.com${firstResult}`,
-        developer: $('.byDeveloper').first().text().trim(),
-        description: 'APK from APKMirror',
-        rating: 0,
-        downloads: 'N/A'
+        downloadUrl: appPageUrl,
+        directDownloadUrl: directDownloadUrl || '',
+        fileSize: appPage$('.infoSlide-value').eq(1).text().trim() || 'N/A',
+        developer: appPage$('.byDeveloper').text().trim() || 'Unknown',
+        description: appPage$('.notes').text().trim() || '',
+        icon: appPage$('.appIcon img').attr('src') || '',
+        screenshots: [],
+        rating: parseFloat(appPage$('.rating').text().trim()) || 0,
+        downloads: 'N/A',
+        lastUpdated: appPage$('.date').text().trim() || ''
       };
 
       return {
@@ -144,43 +180,79 @@ export class AppDownloadService {
         data: appInfo,
         creator: this.creator
       };
-
-    } catch (error) {
+    } catch (error: any) {
+      console.error('APKMIRROR error:', error.message);
       return {
         success: false,
-        error: 'Failed to fetch app from APKMirror',
+        error: `Failed to fetch app from APKMIRROR: ${error.message || 'Unknown error'}`,
         creator: this.creator
       };
     }
   }
 
-  // Search apps by name
+  // Get direct APK URL using yt-dlp
+  private async getDirectAPKUrl(url: string): Promise<string> {
+    try {
+      const args = ['--quiet', '--get-url', url];
+      const downloadUrl = await this.ytDlpWrap.execPromise(args, { timeout: 30000 });
+      return downloadUrl.trim();
+    } catch (error: any) {
+      console.error('yt-dlp error:', error.message);
+      return '';
+    }
+  }
+
+  // Search apps
   async searchApps(query: string, platform: string = 'android'): Promise<AppDownloadResult> {
     try {
-      // Demo search results - in real implementation would scrape from app stores
+      if (!query) {
+        return { success: false, error: 'Query is required', creator: this.creator };
+      }
+
+      const searchUrl = platform === 'ios'
+        ? `https://www.apple.com/us/search/${encodeURIComponent(query)}?src=serp`
+        : `https://apkpure.com/search?q=${encodeURIComponent(query)}`;
+
+      const response = await axios.get(searchUrl, {
+        headers: { 'User-Agent': this.userAgent },
+        timeout: 15000
+      });
+
+      const $ = cheerio.load(response.data);
+      const apps: AppSearchResult['apps'] = [];
+
+      if (platform === 'ios') {
+        $('.rf-serp-productname a').each((_, el) => {
+          const appName = $(el).text().trim();
+          apps.push({
+            appName,
+            packageName: `ios.${appName.toLowerCase().replace(/\s+/g, '')}`,
+            developer: 'Unknown',
+            icon: $('.rf-serp-productimage img').attr('src') || '',
+            rating: 0,
+            downloads: 'N/A',
+            category: 'Unknown'
+          });
+        });
+      } else {
+        $('.search-dl .search-title a').each((_, el) => {
+          const appName = $(el).text().trim();
+          const packageName = $(el).attr('href')?.split('/')[2] || `com.example.${appName.toLowerCase().replace(/\s+/g, '')}`;
+          apps.push({
+            appName,
+            packageName,
+            developer: $('.search-dl .search-developer').eq(_).text().trim() || 'Unknown',
+            icon: $('.search-dl img').eq(_).attr('src') || '',
+            rating: parseFloat($('.search-dl .score').eq(_).text().trim()) || 0,
+            downloads: $('.search-dl .downloads').eq(_).text().trim() || '0',
+            category: $('.search-dl .category').eq(_).text().trim() || 'Unknown'
+          });
+        });
+      }
+
       const searchResults: AppSearchResult = {
-        apps: [
-          {
-            appName: `${query} App`,
-            packageName: `com.example.${query.toLowerCase().replace(/\s+/g, '')}`,
-            developer: 'Example Developer',
-            icon: 'https://example.com/icon.png',
-            rating: 4.5,
-            downloads: '10M+',
-            category: 'Productivity'
-          },
-          {
-            appName: `${query} Pro`,
-            packageName: `com.pro.${query.toLowerCase().replace(/\s+/g, '')}`,
-            developer: 'Pro Developer',
-            icon: 'https://example.com/pro-icon.png',
-            rating: 4.8,
-            downloads: '5M+',
-            price: '$2.99',
-            category: 'Utilities'
-          }
-        ],
-        totalResults: 2
+        apps: apps.slice(0, 10),
+        totalResults: apps.length
       };
 
       return {
@@ -188,20 +260,19 @@ export class AppDownloadService {
         data: searchResults,
         creator: this.creator
       };
-
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Search error:', error.message);
       return {
         success: false,
-        error: 'App search failed',
+        error: `App search failed: ${error.message || 'Unknown error'}`,
         creator: this.creator
       };
     }
   }
 
-  // Download app from GitHub releases
+  // Download from GitHub releases
   async downloadFromGitHub(repoUrl: string, assetName?: string): Promise<AppDownloadResult> {
     try {
-      // Extract owner and repo from URL
       const match = repoUrl.match(/github\.com\/([^\/]+)\/([^\/]+)/);
       if (!match) {
         throw new Error('Invalid GitHub repository URL');
@@ -209,7 +280,6 @@ export class AppDownloadService {
 
       const [, owner, repo] = match;
       const apiUrl = `https://api.github.com/repos/${owner}/${repo}/releases/latest`;
-      
       const response = await axios.get(apiUrl, {
         headers: { 'User-Agent': this.userAgent },
         timeout: 15000
@@ -217,16 +287,15 @@ export class AppDownloadService {
 
       const release = response.data;
       const assets = release.assets || [];
-      
-      // Find the requested asset or the first APK/executable
+
       let targetAsset = assets[0];
       if (assetName) {
         targetAsset = assets.find((asset: any) => asset.name.includes(assetName)) || assets[0];
       } else {
-        targetAsset = assets.find((asset: any) => 
-          asset.name.endsWith('.apk') || 
-          asset.name.endsWith('.exe') || 
-          asset.name.endsWith('.dmg') || 
+        targetAsset = assets.find((asset: any) =>
+          asset.name.endsWith('.apk') ||
+          asset.name.endsWith('.exe') ||
+          asset.name.endsWith('.dmg') ||
           asset.name.endsWith('.deb') ||
           asset.name.endsWith('.rpm')
         ) || assets[0];
@@ -246,6 +315,8 @@ export class AppDownloadService {
         fileSize: this.formatFileSize(targetAsset.size),
         developer: owner,
         description: release.body || 'GitHub Release',
+        icon: '',
+        screenshots: [],
         downloads: targetAsset.download_count?.toString() || '0',
         lastUpdated: release.published_at
       };
@@ -255,30 +326,57 @@ export class AppDownloadService {
         data: appInfo,
         creator: this.creator
       };
-
-    } catch (error) {
+    } catch (error: any) {
+      console.error('GitHub error:', error.message);
       return {
         success: false,
-        error: 'Failed to fetch app from GitHub',
+        error: `Failed to fetch app from GitHub: ${error.message || 'Unknown error'}`,
         creator: this.creator
       };
     }
   }
 
-  // Get Windows app from official sources
+  // Get Windows app
   async getWindowsApp(appName: string): Promise<AppDownloadResult> {
     try {
-      // This would integrate with official Windows sources in real implementation
+      if (!appName) {
+        return { success: false, error: 'App name is required', creator: this.creator };
+      }
+
+      // Scrape Microsoft Store
+      const searchUrl = `https://www.microsoft.com/store/search?q=${encodeURIComponent(appName)}`;
+      const response = await axios.get(searchUrl, {
+        headers: { 'User-Agent': this.userAgent },
+        timeout: 15000
+      });
+
+      const $ = cheerio.load(response.data);
+      const firstResult = $('.m-product-detail a').first().attr('href');
+      if (!firstResult) {
+        throw new Error('App not found on Microsoft Store');
+      }
+
+      const appPageUrl = `https://www.microsoft.com${firstResult}`;
+      const appPageResponse = await axios.get(appPageUrl, {
+        headers: { 'User-Agent': this.userAgent },
+        timeout: 15000
+      });
+
+      const appPage$ = cheerio.load(appPageResponse.data);
       const appInfo: AppDownloadInfo = {
-        appName: appName,
+        appName: appPage$('h1').text().trim() || appName,
         packageName: `windows.${appName.toLowerCase().replace(/\s+/g, '')}`,
-        version: 'Latest',
+        version: appPage$('.version').text().trim() || 'Latest',
         platform: 'windows',
-        downloadUrl: `https://www.microsoft.com/store/apps/${appName}`,
-        developer: 'Microsoft Store',
-        description: `Official ${appName} for Windows`,
-        rating: 4.5,
-        downloads: 'N/A'
+        downloadUrl: appPageUrl,
+        directDownloadUrl: '', // Microsoft Store apps require store installation
+        developer: appPage$('.publisher').text().trim() || 'Unknown',
+        description: appPage$('.description').text().trim() || '',
+        icon: appPage$('.app-icon img').attr('src') || '',
+        screenshots: appPage$('.screenshot img').map((_, el) => appPage$(el).attr('src') || '').get(),
+        rating: parseFloat(appPage$('.rating').text().trim()) || 0,
+        downloads: 'N/A',
+        lastUpdated: appPage$('.release-date').text().trim() || ''
       };
 
       return {
@@ -286,30 +384,57 @@ export class AppDownloadService {
         data: appInfo,
         creator: this.creator
       };
-
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Windows app error:', error.message);
       return {
         success: false,
-        error: 'Failed to fetch Windows app',
+        error: `Failed to fetch Windows app: ${error.message || 'Unknown error'}`,
         creator: this.creator
       };
     }
   }
 
-  // Get Mac app information
+  // Get Mac app
   async getMacApp(appName: string): Promise<AppDownloadResult> {
     try {
-      // This would integrate with Mac App Store in real implementation
+      if (!appName) {
+        return { success: false, error: 'App name is required', creator: this.creator };
+      }
+
+      // Scrape Mac App Store
+      const searchUrl = `https://www.apple.com/us/search/${encodeURIComponent(appName)}?src=serp`;
+      const response = await axios.get(searchUrl, {
+        headers: { 'User-Agent': this.userAgent },
+        timeout: 15000
+      });
+
+      const $ = cheerio.load(response.data);
+      const firstResult = $('.rf-serp-productname a').first().attr('href');
+      if (!firstResult) {
+        throw new Error('App not found on Mac App Store');
+      }
+
+      const appPageUrl = firstResult.startsWith('http') ? firstResult : `https://www.apple.com${firstResult}`;
+      const appPageResponse = await axios.get(appPageUrl, {
+        headers: { 'User-Agent': this.userAgent },
+        timeout: 15000
+      });
+
+      const appPage$ = cheerio.load(appPageResponse.data);
       const appInfo: AppDownloadInfo = {
-        appName: appName,
+        appName: appPage$('.app-header__title').text().trim() || appName,
         packageName: `mac.${appName.toLowerCase().replace(/\s+/g, '')}`,
-        version: 'Latest',
+        version: appPage$('.version').text().trim() || 'Latest',
         platform: 'mac',
-        downloadUrl: `https://apps.apple.com/app/${appName}`,
-        developer: 'App Store',
-        description: `Official ${appName} for macOS`,
-        rating: 4.7,
-        downloads: 'N/A'
+        downloadUrl: appPageUrl,
+        directDownloadUrl: '', // Mac App Store apps require store installation
+        developer: appPage$('.app-header__developer').text().trim() || 'Unknown',
+        description: appPage$('.we-product-details__description').text().trim() || '',
+        icon: appPage$('.we-artwork__image').attr('src') || '',
+        screenshots: appPage$('.we-media-gallery__image').map((_, el) => appPage$(el).attr('src') || '').get(),
+        rating: parseFloat(appPage$('.we-customer-ratings__average').text().trim()) || 0,
+        downloads: 'N/A',
+        lastUpdated: appPage$('.release-date').text().trim() || ''
       };
 
       return {
@@ -317,80 +442,75 @@ export class AppDownloadService {
         data: appInfo,
         creator: this.creator
       };
-
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Mac app error:', error.message);
       return {
         success: false,
-        error: 'Failed to fetch Mac app',
+        error: `Failed to fetch Mac app: ${error.message || 'Unknown error'}`,
         creator: this.creator
       };
     }
   }
 
-  // Get popular apps list
+  // Get popular apps
   async getPopularApps(platform: string = 'android', category?: string): Promise<AppDownloadResult> {
     try {
-      const popularApps: AppSearchResult = {
-        apps: [
-          {
-            appName: 'WhatsApp Messenger',
-            packageName: 'com.whatsapp',
-            developer: 'WhatsApp LLC',
-            icon: 'https://example.com/whatsapp-icon.png',
-            rating: 4.2,
-            downloads: '5B+',
-            category: 'Communication'
-          },
-          {
-            appName: 'Instagram',
-            packageName: 'com.instagram.android',
-            developer: 'Instagram',
-            icon: 'https://example.com/instagram-icon.png',
-            rating: 4.3,
-            downloads: '2B+',
-            category: 'Social'
-          },
-          {
-            appName: 'YouTube',
-            packageName: 'com.google.android.youtube',
-            developer: 'Google LLC',
-            icon: 'https://example.com/youtube-icon.png',
-            rating: 4.4,
-            downloads: '10B+',
-            category: 'Video Players & Editors'
-          },
-          {
-            appName: 'TikTok',
-            packageName: 'com.zhiliaoapp.musically',
-            developer: 'TikTok Ltd.',
-            icon: 'https://example.com/tiktok-icon.png',
-            rating: 4.4,
-            downloads: '3B+',
-            category: 'Entertainment'
-          },
-          {
-            appName: 'Telegram',
-            packageName: 'org.telegram.messenger',
-            developer: 'Telegram FZ-LLC',
-            icon: 'https://example.com/telegram-icon.png',
-            rating: 4.6,
-            downloads: '1B+',
-            category: 'Communication'
-          }
-        ],
-        totalResults: 5
+      const searchUrl = platform === 'ios'
+        ? 'https://www.apple.com/us/app-store/'
+        : 'https://apkpure.com/charts/android/top';
+
+      const response = await axios.get(searchUrl, {
+        headers: { 'User-Agent': this.userAgent },
+        timeout: 15000
+      });
+
+      const $ = cheerio.load(response.data);
+      const apps: AppSearchResult['apps'] = [];
+
+      if (platform === 'ios') {
+        $('.we-popular-app').slice(0, 10).each((_, el) => {
+          const appName = $(el).find('.we-popular-app__title').text().trim();
+          apps.push({
+            appName,
+            packageName: `ios.${appName.toLowerCase().replace(/\s+/g, '')}`,
+            developer: $(el).find('.we-popular-app__developer').text().trim() || 'Unknown',
+            icon: $(el).find('.we-popular-app__icon').attr('src') || '',
+            rating: parseFloat($(el).find('.we-customer-ratings__average').text().trim()) || 0,
+            downloads: 'N/A',
+            category: $(el).find('.we-popular-app__category').text().trim() || 'Unknown'
+          });
+        });
+      } else {
+        $('.chart-list .app-item').slice(0, 10).each((_, el) => {
+          const appName = $(el).find('.app-name').text().trim();
+          const packageName = $(el).find('a').attr('href')?.split('/')[2] || `com.example.${appName.toLowerCase().replace(/\s+/g, '')}`;
+          apps.push({
+            appName,
+            packageName,
+            developer: $(el).find('.developer').text().trim() || 'Unknown',
+            icon: $(el).find('img').attr('src') || '',
+            rating: parseFloat($(el).find('.score').text().trim()) || 0,
+            downloads: $(el).find('.downloads').text().trim() || '0',
+            category: $(el).find('.category').text().trim() || 'Unknown'
+          });
+        });
+      }
+
+      const searchResults: AppSearchResult = {
+        apps,
+        totalResults: apps.length
       };
 
       return {
         success: true,
-        data: popularApps,
+        data: searchResults,
         creator: this.creator
       };
-
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Popular apps error:', error.message);
       return {
         success: false,
-        error: 'Failed to fetch popular apps',
+        error: `Failed to fetch popular apps: ${error.message || 'Unknown error'}`,
         creator: this.creator
       };
     }
@@ -417,17 +537,10 @@ export class AppDownloadService {
   getStatus() {
     return {
       service: 'App Download API',
-      version: '1.0.0',
+      version: '1.1.0',
       status: 'operational',
       supportedPlatforms: ['Android', 'iOS', 'Windows', 'macOS', 'Linux'],
-      supportedSources: [
-        'APKPure',
-        'APKMirror', 
-        'GitHub Releases',
-        'Microsoft Store',
-        'Mac App Store',
-        'Official Websites'
-      ],
+      supportedSources: ['APKPure', 'APKMirror', 'GitHub Releases', 'Microsoft Store', 'Mac App Store'],
       features: [
         'APK Downloads',
         'App Search',
