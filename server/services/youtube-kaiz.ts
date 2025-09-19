@@ -29,11 +29,17 @@ interface KaizYouTubeResponse {
 export class KaizYouTubeService {
   private creator = 'broken Vzn';
   private cookiesPath: string | null;
-  private ytDlpWrap: YTDlpWrap;
+  private ytDlpWrap: YTDlpWrap | null; // Allow null to handle initialization failure
 
   constructor() {
     this.cookiesPath = this.getCookiesPath();
-    this.ytDlpWrap = new YTDlpWrap();
+    try {
+      this.ytDlpWrap = new YTDlpWrap();
+      console.log('YTDlpWrap initialized successfully in KaizYouTubeService');
+    } catch (error: any) {
+      console.error('Failed to initialize YTDlpWrap in KaizYouTubeService:', error.message);
+      this.ytDlpWrap = null;
+    }
   }
 
   // Secure cookie management
@@ -77,6 +83,11 @@ export class KaizYouTubeService {
   // Get video metadata using yt-dlp
   private async getVideoData(query: string, cookies?: string): Promise<VideoData | null> {
     try {
+      if (!this.ytDlpWrap) {
+        console.error('yt-dlp-wrap not initialized for getVideoData');
+        return null;
+      }
+
       const args = [
         '--quiet',
         '--skip-download',
@@ -107,7 +118,7 @@ export class KaizYouTubeService {
         thumbnail: data.thumbnail || `https://i.ytimg.com/vi/${data.id}/hq720.jpg`
       };
     } catch (error: any) {
-      console.error('[yt-dlp error]', error.message);
+      console.error('[yt-dlp error] getVideoData:', error.message);
       return null;
     }
   }
@@ -115,6 +126,11 @@ export class KaizYouTubeService {
   // Get download/stream URL using yt-dlp
   private async getDownloadUrl(videoId: string, format: 'video' | 'audio', cookies?: string): Promise<string | null> {
     try {
+      if (!this.ytDlpWrap) {
+        console.error('yt-dlp-wrap not initialized for getDownloadUrl');
+        return null;
+      }
+
       const args = [
         '--quiet',
         '--get-url',
@@ -144,6 +160,14 @@ export class KaizYouTubeService {
         creator: this.creator,
         status: false,
         error: "Missing query parameter"
+      };
+    }
+
+    if (!this.ytDlpWrap) {
+      return {
+        creator: this.creator,
+        status: false,
+        error: "yt-dlp-wrap not initialized"
       };
     }
 
@@ -184,6 +208,14 @@ export class KaizYouTubeService {
       };
     }
 
+    if (!this.ytDlpWrap) {
+      return {
+        creator: this.creator,
+        status: false,
+        error: "yt-dlp-wrap not initialized"
+      };
+    }
+
     const videoData = await this.getVideoData(query, cookies);
     if (!videoData) {
       return {
@@ -219,7 +251,7 @@ export class KaizYouTubeService {
       creator: this.creator,
       security: {
         cookiesConfigured: this.cookiesPath !== null,
-        safeExecution: true
+        safeExecution: !!this.ytDlpWrap // Reflect ytDlpWrap initialization status
       }
     };
   }
