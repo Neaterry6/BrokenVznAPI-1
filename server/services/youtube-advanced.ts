@@ -35,10 +35,16 @@ export interface YouTubeVideoInfo {
 
 export class YouTubeAdvancedService {
   private creator = '@BrokenVZN';
-  private ytDlpWrap: YTDlpWrap;
+  private ytDlpWrap: YTDlpWrap | null; // Allow null to handle initialization failure
 
   constructor() {
-    this.ytDlpWrap = new YTDlpWrap(); // Initialize yt-dlp-wrap for searching and downloading
+    try {
+      this.ytDlpWrap = new YTDlpWrap();
+      console.log('YTDlpWrap initialized successfully in YouTubeAdvancedService');
+    } catch (error: any) {
+      console.error('Failed to initialize YTDlpWrap in YouTubeAdvancedService:', error.message);
+      this.ytDlpWrap = null;
+    }
   }
 
   async searchVideos(search: string): Promise<YouTubeResponse> {
@@ -52,6 +58,14 @@ export class YouTubeAdvancedService {
       }
 
       console.log(`YouTubeAdvanced: Searching for "${search}"...`);
+
+      if (!this.ytDlpWrap) {
+        return {
+          success: false,
+          creator: this.creator,
+          error: 'yt-dlp-wrap not initialized'
+        };
+      }
 
       // Use yt-dlp for real search results
       const searchResults = await this.searchWithYtDlp(search, 10);
@@ -111,6 +125,14 @@ export class YouTubeAdvancedService {
       }
 
       console.log(`YouTubeAdvanced: Playing video for "${search}"...`);
+
+      if (!this.ytDlpWrap) {
+        return {
+          success: false,
+          creator: this.creator,
+          error: 'yt-dlp-wrap not initialized'
+        };
+      }
 
       // Search for the video to get the first result
       const searchResults = await this.searchWithYtDlp(search, 1);
@@ -186,6 +208,14 @@ export class YouTubeAdvancedService {
 
       console.log(`YouTubeAdvanced: Downloading video from ${url}...`);
 
+      if (!this.ytDlpWrap) {
+        return {
+          success: false,
+          creator: this.creator,
+          error: 'yt-dlp-wrap not initialized'
+        };
+      }
+
       // Get video info using ytdl-core
       const options: any = {};
       if (cookies) {
@@ -209,7 +239,7 @@ export class YouTubeAdvancedService {
         };
       }
 
-      // Use yt-dlp to get a downloadable URL (ensures stable download link)
+      // Use yt-dlp to get a downloadable URL
       const ytDlpEventEmitter = this.ytDlpWrap.execPromise([url, '--get-url', '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best']);
       const downloadUrl = await ytDlpEventEmitter;
 
@@ -270,6 +300,10 @@ export class YouTubeAdvancedService {
 
   private async searchWithYtDlp(query: string, maxResults: number): Promise<any[]> {
     try {
+      if (!this.ytDlpWrap) {
+        console.error('yt-dlp-wrap not initialized for search');
+        return [];
+      }
       const searchQuery = `ytsearch${maxResults}:${query}`;
       const ytDlpEventEmitter = this.ytDlpWrap.execPromise([searchQuery, '-J']);
       const output = await ytDlpEventEmitter;
