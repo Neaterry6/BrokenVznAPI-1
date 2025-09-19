@@ -38,10 +38,16 @@ export interface VideoDownloaderResult {
 export class VideoDownloaderService {
   private creator = '@BrokenVZN';
   private userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36';
-  private ytDlpWrap: YTDlpWrap;
+  private ytDlpWrap: YTDlpWrap | null; // Allow null to handle initialization failure
 
   constructor() {
-    this.ytDlpWrap = new YTDlpWrap();
+    try {
+      this.ytDlpWrap = new YTDlpWrap();
+      console.log('YTDlpWrap initialized successfully in VideoDownloaderService');
+    } catch (error: any) {
+      console.error('Failed to initialize YTDlpWrap in VideoDownloaderService:', error.message);
+      this.ytDlpWrap = null;
+    }
   }
 
   // Legal disclaimer
@@ -69,6 +75,11 @@ export class VideoDownloaderService {
   // Get video metadata using yt-dlp
   private async getVideoData(url: string): Promise<VideoInfo | null> {
     try {
+      if (!this.ytDlpWrap) {
+        console.error('yt-dlp-wrap not initialized for getVideoData');
+        return null;
+      }
+
       const args = [
         '--quiet',
         '--skip-download',
@@ -103,6 +114,11 @@ export class VideoDownloaderService {
   // Get download URL using yt-dlp
   private async getDownloadUrl(url: string): Promise<string | null> {
     try {
+      if (!this.ytDlpWrap) {
+        console.error('yt-dlp-wrap not initialized for getDownloadUrl');
+        return null;
+      }
+
       const args = [
         '--quiet',
         '--get-url',
@@ -125,6 +141,14 @@ export class VideoDownloaderService {
         return {
           success: false,
           error: 'Valid URL is required',
+          creator: this.creator
+        };
+      }
+
+      if (!this.ytDlpWrap) {
+        return {
+          success: false,
+          error: 'yt-dlp-wrap not initialized',
           creator: this.creator
         };
       }
@@ -180,6 +204,14 @@ export class VideoDownloaderService {
   // Get video metadata for specific platforms (backward compatibility)
   async getVideoMetadata(platform: string, videoId: string): Promise<VideoDownloaderResult> {
     try {
+      if (!this.ytDlpWrap) {
+        return {
+          success: false,
+          error: 'yt-dlp-wrap not initialized',
+          creator: this.creator
+        };
+      }
+
       let url: string;
       switch (platform.toLowerCase()) {
         case 'youtube':
@@ -214,7 +246,7 @@ export class VideoDownloaderService {
     return {
       service: 'Video Downloader API',
       version: '1.1.0',
-      status: 'operational',
+      status: this.ytDlpWrap ? 'operational' : 'limited (yt-dlp not initialized)',
       supportedPlatforms: 'YouTube, Vimeo, Dailymotion, and 1000+ others via yt-dlp',
       features: [
         'Video Metadata Extraction',
