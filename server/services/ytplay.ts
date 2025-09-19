@@ -49,10 +49,16 @@ export interface YTPlayStreamResult {
 
 export class YTPlayService {
   private creator = '@BrokenVZN';
-  private ytDlpWrap: YTDlpWrap;
+  private ytDlpWrap: YTDlpWrap | null; // Allow null to handle initialization failure
 
   constructor() {
-    this.ytDlpWrap = new YTDlpWrap();
+    try {
+      this.ytDlpWrap = new YTDlpWrap();
+      console.log('YTDlpWrap initialized successfully in YTPlayService');
+    } catch (error: any) {
+      console.error('Failed to initialize YTDlpWrap in YTPlayService:', error.message);
+      this.ytDlpWrap = null;
+    }
   }
 
   async searchVideos(request: YTPlaySearchRequest): Promise<YTPlayResult> {
@@ -68,10 +74,29 @@ export class YTPlayService {
       }
 
       console.log(`YTPlay: Searching for "${query}"...`);
-      
+
+      if (!this.ytDlpWrap) {
+        console.warn('yt-dlp-wrap not initialized, using fallback search results');
+        const fallbackResults = this.getFallbackSearchResults(query, maxResults);
+        return {
+          success: true,
+          data: fallbackResults.map((video: any) => ({
+            id: video.id,
+            title: video.title,
+            author: video.channel.name,
+            duration: video.duration,
+            views: this.formatViews(video.views),
+            thumbnail: video.thumbnail,
+            url: `https://www.youtube.com/watch?v=${video.id}`,
+            uploadDate: undefined
+          })),
+          creator: this.creator
+        };
+      }
+
       // Use yt-dlp for real search results
       const searchResults = await this.searchWithYtDlp(query, maxResults);
-      
+
       if (!searchResults || !Array.isArray(searchResults) || searchResults.length === 0) {
         return {
           success: false,
@@ -87,11 +112,11 @@ export class YTPlayService {
           id: video.id,
           title: video.title || 'Unknown Title',
           author: video.channel?.name || video.uploader || 'Unknown Channel',
-          duration: video.duration || 'Unknown Duration',
-          views: video.views ? this.formatViews(video.views) : 'Unknown Views',
+          duration: video.duration ? this.formatDuration(video.duration) : 'Unknown Duration',
+          views: video.view_count ? this.formatViews(video.view_count) : 'Unknown Views',
           thumbnail: video.thumbnail || '',
           url: `https://www.youtube.com/watch?v=${video.id}`,
-          uploadDate: video.uploadDate || undefined
+          uploadDate: video.upload_date || undefined
         }));
 
       if (videos.length === 0) {
@@ -107,9 +132,8 @@ export class YTPlayService {
         data: videos,
         creator: this.creator
       };
-
-    } catch (error) {
-      console.error('YTPlay search error:', error);
+    } catch (error: any) {
+      console.error('YTPlay search error:', error.message);
       return {
         success: false,
         error: 'Failed to search videos. Please try again.',
@@ -164,7 +188,7 @@ export class YTPlayService {
       let format;
       if (quality === 'highestaudio' || quality === 'lowestaudio') {
         const audioFormats = ytdl.filterFormats(info.formats, 'audioonly');
-        format = quality === 'highestaudio' 
+        format = quality === 'highestaudio'
           ? ytdl.chooseFormat(audioFormats, { quality: 'highestaudio' })
           : ytdl.chooseFormat(audioFormats, { quality: 'lowestaudio' });
       } else {
@@ -192,9 +216,8 @@ export class YTPlayService {
         },
         creator: this.creator
       };
-
-    } catch (error) {
-      console.error('YTPlay stream error:', error);
+    } catch (error: any) {
+      console.error('YTPlay stream error:', error.message);
       return {
         success: false,
         error: 'Failed to get stream URL. Video may be private or unavailable.',
@@ -221,9 +244,12 @@ export class YTPlayService {
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   }
 
-  // Real search method using yt-dlp
   private async searchWithYtDlp(query: string, maxResults: number): Promise<any[]> {
     try {
+      if (!this.ytDlpWrap) {
+        console.error('yt-dlp-wrap not initialized for search');
+        return this.getFallbackSearchResults(query, maxResults);
+      }
       const searchQuery = `ytsearch${maxResults}:${query}`;
       const ytDlpEventEmitter = this.ytDlpWrap.execPromise([searchQuery, '-J']);
       const output = await ytDlpEventEmitter;
@@ -231,14 +257,13 @@ export class YTPlayService {
       // Parse the JSON output from yt-dlp
       const entries = JSON.parse(output).entries || [];
       return entries;
-    } catch (error) {
-      console.error('yt-dlp search failed:', error);
+    } catch (error: any) {
+      console.error('yt-dlp search failed:', error.message);
       // Fallback to mock data only if yt-dlp fails
       return this.getFallbackSearchResults(query, maxResults);
     }
   }
 
-  // Fallback search results when yt-dlp fails
   private getFallbackSearchResults(query: string, maxResults: number): any[] {
     const mockResults = [];
     for (let i = 1; i <= Math.min(maxResults, 5); i++) {
@@ -247,7 +272,7 @@ export class YTPlayService {
         title: `${query} - Search Result ${i}`,
         channel: { name: 'Sample Channel' },
         duration: '3:45',
-        views: 1000000 + i * 1000,
+        view_count: 1000000 + i * 1000,
         thumbnail: 'https://img.youtube.com/vi/dQw4w9WgXcQ/maxresdefault.jpg',
         type: 'video'
       });
@@ -255,12 +280,10 @@ export class YTPlayService {
     return mockResults;
   }
 
-  // Video search endpoint (returns video info)
   async searchVideo(request: YTPlaySearchRequest): Promise<YTPlayResult> {
     return this.searchVideos(request);
   }
 
-  // Play endpoint (returns streamable audio URL)
   async getPlayUrl(request: YTPlayStreamRequest): Promise<YTPlayStreamResult> {
     const result = await this.getStreamUrl({
       ...request,
@@ -281,12 +304,11 @@ export class YTPlayService {
     return result;
   }
 
-  // Get service status
   getServiceStatus() {
     return {
       service: 'YTPlay',
       version: '1.1',
-      status: 'operational',
+      status: this.ytDlpWrap ? 'operational' : 'limited (yt-dlp not initialized)',
       features: ['video_search', 'stream_url', 'audio_extraction', 'yt-dlp_integration'],
       creator: this.creator
     };
