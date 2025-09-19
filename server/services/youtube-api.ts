@@ -60,11 +60,17 @@ export class YouTubeAPIService {
   private apiKey: string | undefined;
   private baseUrl = 'https://www.googleapis.com/youtube/v3';
   private creator = '@BrokenVZN';
-  private ytDlpWrap: YTDlpWrap;
+  private ytDlpWrap: YTDlpWrap | null; // Allow null to handle initialization failure
 
   constructor() {
     this.apiKey = process.env.YOUTUBE_API_KEY || process.env.GOOGLE_API_KEY;
-    this.ytDlpWrap = new YTDlpWrap();
+    try {
+      this.ytDlpWrap = new YTDlpWrap();
+      console.log('YTDlpWrap initialized successfully in YouTubeAPIService');
+    } catch (error: any) {
+      console.error('Failed to initialize YTDlpWrap in YouTubeAPIService:', error.message);
+      this.ytDlpWrap = null;
+    }
     if (!this.apiKey) {
       console.warn("YOUTUBE_API_KEY not found. Falling back to yt-dlp for data retrieval.");
     }
@@ -152,6 +158,14 @@ export class YouTubeAPIService {
         };
       } else {
         // Fallback to yt-dlp
+        if (!this.ytDlpWrap) {
+          return {
+            success: false,
+            creator: this.creator,
+            error: 'yt-dlp-wrap not initialized'
+          };
+        }
+
         const searchResults = await this.searchWithYtDlp(query, maxResults);
         if (!searchResults || searchResults.length === 0) {
           return {
@@ -249,6 +263,14 @@ export class YouTubeAPIService {
         };
       } else {
         // Fallback to yt-dlp and ytdl-core
+        if (!this.ytDlpWrap) {
+          return {
+            success: false,
+            error: 'yt-dlp-wrap not initialized',
+            creator: this.creator
+          };
+        }
+
         const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
         const ytDlpEventEmitter = this.ytDlpWrap.execPromise([videoUrl, '-J']);
         const output = await ytDlpEventEmitter;
@@ -352,7 +374,15 @@ export class YouTubeAPIService {
           creator: this.creator
         };
       } else {
-        // Fallback to yt-dlp (limited channel info)
+        // Fallback to yt-dlp
+        if (!this.ytDlpWrap) {
+          return {
+            success: false,
+            error: 'yt-dlp-wrap not initialized',
+            creator: this.creator
+          };
+        }
+
         const channelUrl = `https://www.youtube.com/channel/${channelId}`;
         const ytDlpEventEmitter = this.ytDlpWrap.execPromise([channelUrl, '-J']);
         const output = await ytDlpEventEmitter;
@@ -427,6 +457,10 @@ export class YouTubeAPIService {
 
   private async searchWithYtDlp(query: string, maxResults: number): Promise<any[]> {
     try {
+      if (!this.ytDlpWrap) {
+        console.error('yt-dlp-wrap not initialized for search');
+        return [];
+      }
       const searchQuery = `ytsearch${maxResults}:${query}`;
       const ytDlpEventEmitter = this.ytDlpWrap.execPromise([searchQuery, '-J']);
       const output = await ytDlpEventEmitter;
