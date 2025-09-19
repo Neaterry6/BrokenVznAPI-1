@@ -77,7 +77,7 @@ export class Anime2Service {
   private aniListToken: string | null = null;
   private creator = 'heisbroken';
   private userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36';
-  private ytDlpWrap: YTDlpWrap;
+  private ytDlpWrap: YTDlpWrap | null; // Allow null to handle initialization failure
 
   private readonly aniListQuery = `
     query ($search: String, $seasonYear: Int, $format: MediaFormat, $genre_in: [String], $perPage: Int) {
@@ -109,7 +109,13 @@ export class Anime2Service {
   constructor() {
     this.clientId = process.env.ANILIST_CLIENT_ID || '';
     this.clientSecret = process.env.ANILIST_CLIENT_SECRET || '';
-    this.ytDlpWrap = new YTDlpWrap();
+    try {
+      this.ytDlpWrap = new YTDlpWrap();
+      console.log('YTDlpWrap initialized successfully');
+    } catch (error: any) {
+      console.error('Failed to initialize YTDlpWrap:', error.message);
+      this.ytDlpWrap = null; // Fallback to null
+    }
 
     if (!this.clientId || !this.clientSecret) {
       console.warn('AniList credentials missing; using public queries');
@@ -326,6 +332,10 @@ export class Anime2Service {
       const validation = this.validateUrl(`https://9anime.to/watch/${episodeId}`);
       if (!validation.valid) {
         return { success: false, status: 'error', error: validation.error, creator: this.creator };
+      }
+
+      if (!this.ytDlpWrap) {
+        return { success: false, status: 'error', error: 'yt-dlp-wrap not initialized', creator: this.creator };
       }
 
       const args = ['--get-url', '--format', 'best[ext=mp4]/best[ext=m3u8]/best', `https://9anime.to/watch/${episodeId}`];
