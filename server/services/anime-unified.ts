@@ -1,6 +1,7 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import YTDlpWrap from 'yt-dlp-wrap';
+import path from 'path';
 
 export interface AnimeSearchRequest {
   query: string;
@@ -92,10 +93,16 @@ export class AnimeUnifiedService {
   private anilistBaseUrl = 'https://graphql.anilist.co';
   private nyaaBaseUrl = 'https://nyaa.si';
   private userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36';
-  private ytDlpWrap: YTDlpWrap;
+  private ytDlpWrap: YTDlpWrap | null; // Allow null to handle initialization failure
 
   constructor() {
-    this.ytDlpWrap = new YTDlpWrap();
+    try {
+      this.ytDlpWrap = new YTDlpWrap();
+      console.log('YTDlpWrap initialized successfully in AnimeUnifiedService');
+    } catch (error: any) {
+      console.error('Failed to initialize YTDlpWrap in AnimeUnifiedService:', error.message);
+      this.ytDlpWrap = null;
+    }
   }
 
   // Legal disclaimer
@@ -169,6 +176,11 @@ export class AnimeUnifiedService {
   // Fetch streaming links using yt-dlp
   private async getStreamingLinksInternal(title: string, episode: number): Promise<StreamingLink[]> {
     try {
+      if (!this.ytDlpWrap) {
+        console.error('yt-dlp-wrap not initialized for getStreamingLinksInternal');
+        return [];
+      }
+
       const searchQuery = `${title} episode ${episode} english sub`;
       const searchUrl = `https://9anime.to/search?keyword=${encodeURIComponent(searchQuery)}`;
       const response = await axios.get(searchUrl, {
@@ -414,7 +426,7 @@ export class AnimeUnifiedService {
         };
 
         // Add streaming/download links
-        animeInfo.streamingLinks = await this.getStreamingLinksInternal(anime.title.romaji, 1);
+        animeInfo.streamingLinks = this.ytDlpWrap ? await this.getStreamingLinksInternal(anime.title.romaji, 1) : [];
         animeInfo.downloadLinks = await this.getDownloadLinksInternal(anime.title.romaji, 1);
       } else {
         const response = await axios.get(`${this.jikanBaseUrl}/anime/${id}/full`, { timeout: 15000 });
@@ -438,7 +450,7 @@ export class AnimeUnifiedService {
           studios: anime.studios?.map((studio: any) => studio.name) || [],
           views: anime.members || 0,
           published: this.formatPublishedDate(anime.aired?.from || ''),
-          streamingLinks: await this.getStreamingLinksInternal(anime.title, 1),
+          streamingLinks: this.ytDlpWrap ? await this.getStreamingLinksInternal(anime.title, 1) : [],
           downloadLinks: await this.getDownloadLinksInternal(anime.title, 1)
         };
       }
@@ -507,7 +519,7 @@ export class AnimeUnifiedService {
 
       // Add streaming/download links
       for (const episode of episodes) {
-        episode.streamingLinks = await this.getStreamingLinksInternal(title, episode.number);
+        episode.streamingLinks = this.ytDlpWrap ? await this.getStreamingLinksInternal(title, episode.number) : [];
         episode.downloadLinks = await this.getDownloadLinksInternal(title, episode.number);
       }
 
@@ -530,6 +542,10 @@ export class AnimeUnifiedService {
     try {
       if (!animeTitle) {
         return { success: false, error: 'Please provide anime title', creator: this.creator };
+      }
+
+      if (!this.ytDlpWrap) {
+        return { success: false, error: 'yt-dlp-wrap not initialized', creator: this.creator };
       }
 
       const streamingLinks = await this.getStreamingLinksInternal(animeTitle, episode);
@@ -806,7 +822,7 @@ export class AnimeUnifiedService {
     return {
       service: 'Anime Unified API',
       version: '1.1.0',
-      status: 'operational',
+      status: this.ytDlpWrap ? 'operational' : 'limited (yt-dlp not initialized)',
       sources: ['Jikan API v4', 'AniList GraphQL', '9anime (streaming)', 'Nyaa.si (downloads)'],
       features: ['Search', 'Details', 'Episodes', 'Streaming', 'Downloads', 'Seasonal', 'Top Lists'],
       disclaimer: this.getLegalDisclaimer(),
