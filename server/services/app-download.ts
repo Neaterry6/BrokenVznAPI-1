@@ -56,10 +56,16 @@ export interface AppDownloadResult {
 export class AppDownloadService {
   private creator = '@BrokenVZN';
   private userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36';
-  private ytDlpWrap: YTDlpWrap;
+  private ytDlpWrap: YTDlpWrap | null; // Allow null to handle initialization failure
 
   constructor() {
-    this.ytDlpWrap = new YTDlpWrap();
+    try {
+      this.ytDlpWrap = new YTDlpWrap();
+      console.log('YTDlpWrap initialized successfully in AppDownloadService');
+    } catch (error: any) {
+      console.error('Failed to initialize YTDlpWrap in AppDownloadService:', error.message);
+      this.ytDlpWrap = null;
+    }
   }
 
   // Get APK from APKPure
@@ -90,7 +96,7 @@ export class AppDownloadService {
       const appPage$ = cheerio.load(appPageResponse.data);
       const downloadLink = appPage$('a[href*="/download/"]').attr('href');
       let directDownloadUrl = '';
-      if (downloadLink) {
+      if (downloadLink && this.ytDlpWrap) {
         directDownloadUrl = await this.getDirectAPKUrl(downloadLink);
       }
 
@@ -154,7 +160,7 @@ export class AppDownloadService {
       const appPage$ = cheerio.load(appPageResponse.data);
       const downloadLink = appPage$('.downloadLink').attr('href');
       let directDownloadUrl = '';
-      if (downloadLink) {
+      if (downloadLink && this.ytDlpWrap) {
         directDownloadUrl = await this.getDirectAPKUrl(`https://www.apkmirror.com${downloadLink}`);
       }
 
@@ -193,6 +199,11 @@ export class AppDownloadService {
   // Get direct APK URL using yt-dlp
   private async getDirectAPKUrl(url: string): Promise<string> {
     try {
+      if (!this.ytDlpWrap) {
+        console.error('yt-dlp-wrap not initialized for getDirectAPKUrl');
+        return '';
+      }
+
       const args = ['--quiet', '--get-url', url];
       const downloadUrl = await this.ytDlpWrap.execPromise(args, { timeout: 30000 });
       return downloadUrl.trim();
@@ -538,7 +549,7 @@ export class AppDownloadService {
     return {
       service: 'App Download API',
       version: '1.1.0',
-      status: 'operational',
+      status: this.ytDlpWrap ? 'operational' : 'limited (yt-dlp not initialized)',
       supportedPlatforms: ['Android', 'iOS', 'Windows', 'macOS', 'Linux'],
       supportedSources: ['APKPure', 'APKMirror', 'GitHub Releases', 'Microsoft Store', 'Mac App Store'],
       features: [
