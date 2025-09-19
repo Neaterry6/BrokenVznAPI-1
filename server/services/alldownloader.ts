@@ -52,10 +52,16 @@ export interface AllDownloaderInfoResult {
 
 export class AllDownloaderService {
   private creator = '@BrokenVZN';
-  private ytDlpWrap: YTDlpWrap;
+  private ytDlpWrap: YTDlpWrap | null; // Allow null to handle initialization failure
 
   constructor() {
-    this.ytDlpWrap = new YTDlpWrap();
+    try {
+      this.ytDlpWrap = new YTDlpWrap();
+      console.log('YTDlpWrap initialized successfully in AllDownloaderService');
+    } catch (error: any) {
+      console.error('Failed to initialize YTDlpWrap in AllDownloaderService:', error.message);
+      this.ytDlpWrap = null;
+    }
   }
 
   // Legal disclaimer
@@ -159,6 +165,10 @@ export class AllDownloaderService {
   // Get media information
   async getMediaInfo(url: string): Promise<AllDownloaderInfoResult> {
     try {
+      if (!this.ytDlpWrap) {
+        return { success: false, creator: this.creator, error: 'yt-dlp-wrap not initialized' };
+      }
+
       const validation = this.validateUrl(url);
       if (!validation.valid) {
         return { success: false, creator: this.creator, error: validation.error };
@@ -206,6 +216,10 @@ export class AllDownloaderService {
   // Download video/audio
   async downloadVideo(request: AllDownloaderRequest): Promise<AllDownloaderResult> {
     try {
+      if (!this.ytDlpWrap) {
+        return { success: false, creator: this.creator, error: 'yt-dlp-wrap not initialized' };
+      }
+
       const { url, format = 'video', quality = 'best' } = request;
       const validation = this.validateUrl(url);
       if (!validation.valid) {
@@ -305,6 +319,18 @@ export class AllDownloaderService {
         ],
         note: 'This service uses yt-dlp, which supports over 1000 platforms. See https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md for the full list.'
       }
+    };
+  }
+
+  // Get service status
+  getStatus() {
+    return {
+      service: 'All Downloader API',
+      version: '1.0.0',
+      status: this.ytDlpWrap ? 'operational' : 'limited (yt-dlp not initialized)',
+      features: ['Media Info', 'Video Download', 'Audio Download', 'Multi-Platform Support'],
+      disclaimer: this.getLegalDisclaimer(),
+      creator: this.creator
     };
   }
 }
