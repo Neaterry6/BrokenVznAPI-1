@@ -173,11 +173,10 @@ export default function DocsPage() {
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <p className="text-gray-600 dark:text-gray-300">
-                      Most endpoints require an API key for authentication. Include your API key in the request headers.
+                      All public endpoints can be called directly now — no API key header is required.
                     </p>
                     <CodeBlock id="auth-example">
-{`curl -H "X-API-Key: your-api-key" \\
-  https://your-domain.com/api/endpoint`}
+{`curl https://your-domain.com/api/endpoint`}
                     </CodeBlock>
                   </CardContent>
                 </Card>

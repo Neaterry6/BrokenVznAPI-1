@@ -102,53 +102,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   };
   
   // Middleware for API key validation
-  const validateApiKey = async (req: any, res: any, next: any) => {
-    const apiKey = req.headers['x-api-key'] || req.query.apiKey;
-    
-    if (!apiKey) {
-      return res.status(401).json({ 
-        success: false, 
-        error: 'API key is required' 
-      });
-    }
-
-    // Allow some default API keys for testing
-    const defaultKeys = ['free-api-key', 'test-key', 'demo-key'];
-    if (defaultKeys.includes(apiKey as string)) {
-      (req as any).user = {
-        _id: 'default-user',
-        apiKey: apiKey,
-        tier: 'free',
-        requestCount: 0
-      };
-      next();
-      return;
-    }
+  const validateApiKey = async (req: any, _res: any, next: any) => {
+    // API key requirement intentionally removed.
+    // Keep lightweight user context so existing analytics/admin flows still work.
+    const apiKey = (req.headers['x-api-key'] || req.query.apiKey || 'public-access') as string;
 
     const user = await storage.getUserByApiKey(apiKey);
-    if (!user) {
-      return res.status(401).json({ 
-        success: false, 
-        error: 'Invalid API key' 
-      });
-    }
-
-    // Rate limiting check
-    const rateLimits = {
-      free: 1000,
-      pro: 100000,
-      enterprise: -1 // unlimited
+    (req as any).user = user || {
+      _id: 'public-user',
+      apiKey,
+      tier: 'free',
+      requestCount: 0
     };
 
-    const limit = rateLimits[user.tier as keyof typeof rateLimits];
-    if (limit !== -1 && (user.requestCount || 0) >= limit) {
-      return res.status(429).json({
-        success: false,
-        error: 'Rate limit exceeded'
-      });
-    }
-
-    (req as any).user = user;
     next();
   };
 
@@ -2877,6 +2843,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create YouTube DLP API instance
   const youtubeDlpAPI = new YouTubeDlpAPI();
 
+  const youtubeInput = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
+
   // YouTube DLP API Routes
   // Search videos
   app.get('/api/youtube-dlp/search', async (req, res) => {
@@ -2911,7 +2879,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get playable stream
   app.get('/api/youtube-dlp/play', async (req, res) => {
     try {
-      const { id } = req.query;
+      const id = youtubeInput(req.query.id) || youtubeInput(req.query.url);
       
       if (!id) {
         return res.status(400).json({ 
@@ -2937,7 +2905,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get video download
   app.get('/api/youtube-dlp/video', async (req, res) => {
     try {
-      const { id, quality } = req.query;
+      const id = youtubeInput(req.query.id) || youtubeInput(req.query.url);
+      const quality = youtubeInput(req.query.quality);
       
       if (!id) {
         return res.status(400).json({ 
@@ -2966,7 +2935,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get audio download
   app.get('/api/youtube-dlp/audio', async (req, res) => {
     try {
-      const { id } = req.query;
+      const id = youtubeInput(req.query.id) || youtubeInput(req.query.url);
       
       if (!id) {
         return res.status(400).json({ 
@@ -2992,7 +2961,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get video info only
   app.get('/api/youtube-dlp/info', async (req, res) => {
     try {
-      const { id } = req.query;
+      const id = youtubeInput(req.query.id) || youtubeInput(req.query.url);
       
       if (!id) {
         return res.status(400).json({ 

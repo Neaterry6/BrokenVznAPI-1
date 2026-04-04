@@ -3,11 +3,25 @@ import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Copy, CheckCircle2 } from "lucide-react";
 import { apiCategories } from "../data/api-categories";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Home() {
   const [backgroundImage, setBackgroundImage] = useState<string>('');
+  const { toast } = useToast();
+  const quickEndpoints = [
+    "/api/status",
+    "/api/youtube-dlp/search?q=lofi&maxResults=5",
+    "/api/pollinations/image/generate?prompt=cyberpunk+city",
+    "/api/waifu/enhanced/random?type=sfw",
+  ];
+
+  const copyEndpoint = async (endpoint: string) => {
+    const absolute = `${window.location.origin}${endpoint}`;
+    await navigator.clipboard.writeText(absolute);
+    toast({ title: "Copied", description: "API URL copied to clipboard." });
+  };
 
   // Fetch anime background images
   useEffect(() => {
@@ -77,9 +91,8 @@ export default function Home() {
               BrokenVZN APIs
             </h1>
             <p className="text-xl text-gray-300 mb-8 max-w-3xl mx-auto leading-relaxed">
-              🚀 Comprehensive unified REST API with <span className="text-purple-400 font-semibold">150+ working endpoints</span>. 
-              Social media downloaders, AI services, image hosting, anime databases, and developer utilities 
-              - all with <span className="text-emerald-400 font-semibold">real data, no mocks</span>!
+              🚀 Unified REST APIs with <span className="text-purple-400 font-semibold">real live responses</span>. 
+              YouTube, downloader, apps, AI, and image tools in one modern playground.
             </p>
             <p className="text-lg text-gray-400 mb-12 max-w-2xl mx-auto">
               Created by <span className="font-bold text-transparent bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text">@BrokenVZN</span> 
@@ -104,6 +117,24 @@ export default function Home() {
               >
                 🚀 Try APIs Now
               </Button>
+            </div>
+
+            <div className="max-w-3xl mx-auto rounded-2xl border border-purple-400/30 bg-black/30 backdrop-blur-md p-4 text-left">
+              <div className="mb-3 flex items-center gap-2 text-sm text-purple-200">
+                <CheckCircle2 className="h-4 w-4" />
+                <span>No API key required. Copy and call any endpoint directly.</span>
+              </div>
+              <div className="space-y-2">
+                {quickEndpoints.map((endpoint) => (
+                  <div key={endpoint} className="flex items-center justify-between gap-2 rounded-md bg-black/30 px-3 py-2">
+                    <code className="text-xs sm:text-sm text-emerald-300 break-all">{endpoint}</code>
+                    <Button size="sm" variant="outline" onClick={() => copyEndpoint(endpoint)}>
+                      <Copy className="h-3.5 w-3.5 mr-1" />
+                      Copy URL
+                    </Button>
+                  </div>
+                ))}
+              </div>
             </div>
             
             {/* Stats */}
