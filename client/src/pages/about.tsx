@@ -338,11 +338,10 @@ export default function AboutPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className="text-gray-600 dark:text-gray-300">
-                  Most endpoints require an API key for authentication. Include your API key in the request headers.
+                  Endpoints are now public for easier integration. You can call APIs directly without an API key.
                 </p>
                 <CodeBlock id="auth-example">
-{`curl -H "X-API-Key: your-api-key" \\
-  https://your-domain.replit.app/api/endpoint`}
+{`curl https://your-domain.replit.app/api/endpoint`}
                 </CodeBlock>
                 
                 <div className="space-y-4">

@@ -73,7 +73,7 @@ export default function CategoryPage() {
       parameters: endpoint.testFields?.map((field: any) => ({
         name: field.name,
         type: field.type,
-        required: field.name === 'query' || field.name === 'apiKey',
+        required: field.name === 'query',
         description: field.placeholder
       })) || []
     });
@@ -97,17 +97,12 @@ export default function CategoryPage() {
           if (value && key !== 'apiKey') queryParams.append(key, value as string);
         });
         const url = queryParams.toString() ? `${endpoint.endpoint}?${queryParams}` : endpoint.endpoint;
-        response = await fetch(url, {
-          headers: { 'x-api-key': 'free-api-key' }
-        });
+        response = await fetch(url);
       } else {
-        const { apiKey, ...bodyData } = inputs;
+        const { apiKey: _apiKey, ...bodyData } = inputs;
         response = await fetch(endpoint.endpoint, {
           method: endpoint.method,
-          headers: { 
-            'Content-Type': 'application/json',
-            'x-api-key': 'free-api-key'
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(bodyData)
         });
       }
