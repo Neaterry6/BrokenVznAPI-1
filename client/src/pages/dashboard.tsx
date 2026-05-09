@@ -616,63 +616,42 @@ export default function Dashboard() {
 
   const handleTest = async () => {
     if (!selectedEndpoint) return;
-
     setIsLoading(true);
-    try {
-      const apiKey = localStorage.getItem('apiKey') || 'demo-key';
-      
-      let url = selectedEndpoint.endpoint;
-      let options: RequestInit = {
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': apiKey,
-        },
-      };
+    
+    const baseUrl = window.location.origin;
+    let url = baseUrl + selectedEndpoint.endpoint;
+    let options: RequestInit = {
+      headers: { 'Content-Type': 'application/json' },
+    };
 
-      if (selectedEndpoint.method === 'GET') {
-        const params = new URLSearchParams();
-        Object.entries(testParams).forEach(([key, value]) => {
-          if (value !== '' && value !== undefined) {
-            params.append(key, value);
-          }
-        });
-        if (params.toString()) {
-          url += '?' + params.toString();
+    const params = new URLSearchParams();
+    if (selectedEndpoint.method === 'GET') {
+      Object.entries(testParams).forEach(([key, value]) => {
+        if (value !== '' && value !== undefined && value !== null) {
+          params.append(key, String(value));
         }
-      } else {
-        options.method = 'POST';
-        options.body = JSON.stringify(testParams);
-      }
+      });
+      const qs = params.toString();
+      if (qs) url += '?' + qs;
+    } else {
+      options.method = 'POST';
+      options.body = JSON.stringify(testParams);
+    }
 
+    try {
       const response = await fetch(url, options);
-      const result = await response.json();
+      const ct = response.headers.get('content-type') || '';
+      const result = ct.includes('json') ? await response.json() : { raw: await response.text() };
       
-      setTestResult({
-        status: response.status,
-        statusText: response.statusText,
-        headers: Object.fromEntries(response.headers.entries()),
-        data: result
-      });
-
-      if (response.ok) {
-        toast({
-          title: "API Test Successful",
-          description: `${selectedEndpoint.name} executed successfully`,
-        });
-      } else {
-        toast({
-          title: "API Test Failed",
-          description: result.error || "Request failed",
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      console.error('Test failed:', error);
+      setTestResult({ status: response.status, statusText: response.statusText, url, data: result });
       toast({
-        title: "Test Error",
-        description: "Failed to execute API test",
-        variant: "destructive",
+        title: response.ok ? 'Success' : 'Failed',
+        description: selectedEndpoint.name + ': ' + response.status,
+        variant: response.ok ? 'default' : 'destructive',
       });
+    } catch (error: any) {
+      setTestResult({ status: 0, statusText: 'Error', url, data: { error: error.message } });
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
     } finally {
       setIsLoading(false);
     }
