@@ -353,5 +353,130 @@ export function registerNewRoutes(app: Express) {
     } catch { res.status(500).json({ error: 'TTS unavailable' }); }
   });
 
-  console.log('✅ New API routes registered (nanobanana, games, anime, spotify, youtube, tools, downloader)');
+  // ─── Image Editing API ───
+  app.get('/api/edit/resize', async (req, res) => {
+    const { url, width, height } = req.query;
+    if (!url) return res.status(400).json({ error: 'Image URL required' });
+    const w = Number(width) || 400;
+    const h = Number(height) || 300;
+    res.json({ result: `https://images.weserv.nl/?url=${encodeURIComponent(String(url))}&w=${w}&h=${h}&fit=outside`, source: 'weserv' });
+  });
+
+  app.get('/api/edit/filter', async (req, res) => {
+    const { url, filter } = req.query;
+    if (!url) return res.status(400).json({ error: 'Image URL required' });
+    const filters: any = { grayscale: '&filt=grayscale', blur: '&filt=blur&radius=5', sepia: '&filt=sepia', brightness: '&filt=brightness&amount=1.3', contrast: '&filt=contrast&amount=1.5' };
+    const filt = filters[String(filter || '')] || '';
+    res.json({ result: `https://images.weserv.nl/?url=${encodeURIComponent(String(url))}&w=500${filt}`, filter: filter || 'none' });
+  });
+
+  app.get('/api/edit/compress', async (req, res) => {
+    const { url, quality } = req.query;
+    if (!url) return res.status(400).json({ error: 'Image URL required' });
+    const q = Number(quality) || 50;
+    res.json({ result: `https://images.weserv.nl/?url=${encodeURIComponent(String(url))}&w=800&q=${q}`, quality: q });
+  });
+
+  app.get('/api/edit/format', async (req, res) => {
+    const { url, format } = req.query;
+    if (!url) return res.status(400).json({ error: 'Image URL required' });
+    const fmt = String(format || 'webp');
+    res.json({ result: `https://images.weserv.nl/?url=${encodeURIComponent(String(url))}&output=${fmt}`, format: fmt });
+  });
+
+  app.get('/api/edit/crop', async (req, res) => {
+    const { url, x, y, w, h } = req.query;
+    if (!url) return res.status(400).json({ error: 'Image URL required' });
+    res.json({ result: `https://images.weserv.nl/?url=${encodeURIComponent(String(url))}&cx=${x || 0}&cy=${y || 0}&cw=${w || 200}&ch=${h || 200}`, source: 'weserv' });
+  });
+
+  // ─── Movie APIs ───
+  app.get('/api/movies/search', async (req, res) => {
+    const q = String(req.query.q || '');
+    if (!q) return res.status(400).json({ error: 'Query required' });
+    try {
+      const r = await fetch(`https://www.omdbapi.com/?s=${encodeURIComponent(q)}&apikey=${process.env.OMDB_KEY || 'demo'}`);
+      const d = await r.json() as any;
+      res.json({ results: d?.Search || [], total: d?.totalResults || 0, source: 'omdb' });
+    } catch { res.status(500).json({ error: 'Movie search unavailable' }); }
+  });
+
+  app.get('/api/movies/detail', async (req, res) => {
+    const id = String(req.query.id || '');
+    if (!id) return res.status(400).json({ error: 'Movie ID required' });
+    try {
+      const r = await fetch(`https://www.omdbapi.com/?i=${encodeURIComponent(id)}&apikey=${process.env.OMDB_KEY || 'demo'}`);
+      const d = await r.json() as any;
+      res.json({ data: d, source: 'omdb' });
+    } catch { res.status(500).json({ error: 'Movie detail unavailable' }); }
+  });
+
+  app.get('/api/movies/trending', async (req, res) => {
+    try {
+      const r = await fetch('https://api.themoviedb.org/3/trending/movie/week?api_key=' + (process.env.TMDB_KEY || ''));
+      const d = await r.json() as any;
+      res.json({ results: d?.results || [], source: 'tmdb' });
+    } catch { res.status(500).json({ error: 'Trending unavailable' }); }
+  });
+
+  app.get('/api/movies/popular', async (req, res) => {
+    const page = req.query.page || 1;
+    try {
+      const r = await fetch(`https://api.themoviedb.org/3/movie/popular?page=${page}&api_key=${process.env.TMDB_KEY || ''}`);
+      const d = await r.json() as any;
+      res.json({ results: d?.results || [], page: d?.page || 1, total: d?.total_results || 0, source: 'tmdb' });
+    } catch { res.status(500).json({ error: 'Popular movies unavailable' }); }
+  });
+
+  app.get('/api/movies/upcoming', async (req, res) => {
+    try {
+      const r = await fetch(`https://api.themoviedb.org/3/movie/upcoming?api_key=${process.env.TMDB_KEY || ''}`);
+      const d = await r.json() as any;
+      res.json({ results: d?.results || [], source: 'tmdb' });
+    } catch { res.status(500).json({ error: 'Upcoming unavailable' }); }
+  });
+
+  app.get('/api/movies/top-rated', async (req, res) => {
+    try {
+      const r = await fetch(`https://api.themoviedb.org/3/movie/top_rated?api_key=${process.env.TMDB_KEY || ''}`);
+      const d = await r.json() as any;
+      res.json({ results: d?.results || [], source: 'tmdb' });
+    } catch { res.status(500).json({ error: 'Top rated unavailable' }); }
+  });
+
+  // ─── Anime Download ───
+  app.get('/api/anime/download', async (req, res) => {
+    const { url, episode } = req.query;
+    if (!url) return res.status(400).json({ error: 'Anime URL required' });
+    try {
+      const episodeId = String(episode || '').includes('episode-') ? String(episode) : `${String(url)}-episode-${Number(episode) || 1}`;
+      const r = await fetch(`https://api.consumet.org/anime/gogoanime/watch/${encodeURIComponent(episodeId)}?server=gogocdn`);
+      const d = await r.json() as any;
+      const sources = (d?.sources || []).map((s: any) => ({ quality: s.quality || 'auto', url: s.url }));
+      if (d?.download) sources.push({ quality: 'download', url: d.download });
+      res.json({ sources, episode: Number(episode) || 1, source: 'gogoanime' });
+    } catch { res.status(500).json({ error: 'Anime download unavailable' }); }
+  });
+
+  app.get('/api/anime/stream', async (req, res) => {
+    const { id } = req.query;
+    if (!id) return res.status(400).json({ error: 'Episode ID required' });
+    try {
+      const r = await fetch(`https://api.consumet.org/anime/gogoanime/watch/${encodeURIComponent(String(id))}`);
+      const d = await r.json() as any;
+      res.json({ sources: d?.sources || [], subtitles: d?.subtitles || [], source: 'gogoanime' });
+    } catch { res.status(500).json({ error: 'Stream unavailable' }); }
+  });
+
+  app.get('/api/anime/servers', async (req, res) => {
+    const { id } = req.query;
+    if (!id) return res.status(400).json({ error: 'Episode ID required' });
+    try {
+      const r = await fetch(`https://api.consumet.org/anime/gogoanime/servers/${encodeURIComponent(String(id))}`);
+      const d = await r.json() as any;
+      res.json({ servers: d || [], source: 'gogoanime' });
+    } catch { res.status(500).json({ error: 'Servers unavailable' }); }
+  });
+
+  console.log('✅ New API routes registered (nanobanana, games, anime, spotify, youtube, tools, downloader, editing, movies, anime-download)');
 }
