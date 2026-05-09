@@ -242,6 +242,361 @@ const apiEndpoints: ApiEndpoint[] = [
       { name: 'mood', type: 'string', required: true, description: 'Your current mood' },
       { name: 'limit', type: 'number', required: false, description: 'Number of suggestions' }
     ]
+  },
+  // ─── AI (NEW) ───
+  {
+    id: 'nanobanana-chat',
+    name: 'Nanobanana AI Chat',
+    description: 'Chat with Nanobanana AI — fast, free AI assistant',
+    method: 'GET',
+    endpoint: '/api/nanobanana/chat',
+    category: 'AI',
+    icon: Brain,
+    parameters: [
+      { name: 'message', type: 'string', required: true, description: 'Your message' }
+    ]
+  },
+  {
+    id: 'nanobanana-generate',
+    name: 'Nanobanana AI Generate',
+    description: 'Generate text, code, or content with Nanobanana AI',
+    method: 'GET',
+    endpoint: '/api/nanobanana/generate',
+    category: 'AI',
+    icon: Wand2,
+    parameters: [
+      { name: 'prompt', type: 'string', required: true, description: 'Text prompt' }
+    ]
+  },
+  {
+    id: 'nanobanana-image',
+    name: 'Nanobanana AI Image',
+    description: 'Generate images from text prompts using Nanobanana',
+    method: 'GET',
+    endpoint: '/api/nanobanana/image',
+    category: 'AI',
+    icon: Image,
+    parameters: [
+      { name: 'prompt', type: 'string', required: true, description: 'Image description' }
+    ]
+  },
+  {
+    id: 'groq-chat',
+    name: 'Groq AI Chat',
+    description: 'Ultra-fast AI responses using Groq LPU inference',
+    method: 'POST',
+    endpoint: '/api/groq/chat',
+    category: 'AI',
+    icon: Zap,
+    parameters: [
+      { name: 'message', type: 'string', required: true, description: 'Your message' }
+    ]
+  },
+  {
+    id: 'perplexity-search',
+    name: 'Perplexity AI Search',
+    description: 'AI-powered web search with citations',
+    method: 'GET',
+    endpoint: '/api/perplexity/search',
+    category: 'AI',
+    icon: Globe,
+    parameters: [
+      { name: 'query', type: 'string', required: true, description: 'Search query' }
+    ]
+  },
+  // ─── Games (NEW) ───
+  {
+    id: 'trivia',
+    name: 'Trivia Quiz',
+    description: 'Get random trivia questions from various categories',
+    method: 'GET',
+    endpoint: '/api/games/trivia',
+    category: 'Games',
+    icon: Brain,
+    parameters: [
+      { name: 'amount', type: 'number', required: false, description: 'Number of questions (default: 10)' },
+      { name: 'category', type: 'number', required: false, description: 'Category ID' },
+      { name: 'difficulty', type: 'string', required: false, description: 'easy, medium, or hard' }
+    ]
+  },
+  {
+    id: 'word-game',
+    name: 'Word Game',
+    description: 'Play word scramble, hangman, or wordle-style games',
+    method: 'GET',
+    endpoint: '/api/games/word',
+    category: 'Games',
+    icon: Wand2,
+    parameters: [
+      { name: 'type', type: 'string', required: false, description: 'scramble, hangman, or wordle' }
+    ]
+  },
+  {
+    id: 'number-fact',
+    name: 'Number Facts',
+    description: 'Get interesting trivia facts about any number',
+    method: 'GET',
+    endpoint: '/api/games/number-fact',
+    category: 'Games',
+    icon: Zap,
+    parameters: [
+      { name: 'number', type: 'number', required: false, description: 'Number (default: random)' }
+    ]
+  },
+  {
+    id: 'dice-roll',
+    name: 'Dice Roll',
+    description: 'Roll a virtual dice with custom sides',
+    method: 'GET',
+    endpoint: '/api/games/dice',
+    category: 'Games',
+    icon: Zap,
+    parameters: [
+      { name: 'sides', type: 'number', required: false, description: 'Number of sides (default: 6)' }
+    ]
+  },
+  {
+    id: 'coin-flip',
+    name: 'Coin Flip',
+    description: 'Flip a virtual coin — heads or tails',
+    method: 'GET',
+    endpoint: '/api/games/coinflip',
+    category: 'Games',
+    icon: Zap
+  },
+  {
+    id: 'rps',
+    name: 'Rock Paper Scissors',
+    description: 'Play rock-paper-scissors against the computer',
+    method: 'GET',
+    endpoint: '/api/games/rps',
+    category: 'Games',
+    icon: Shield,
+    parameters: [
+      { name: 'choice', type: 'string', required: true, description: 'rock, paper, or scissors' }
+    ]
+  },
+  // ─── Anime (NEW) ───
+  {
+    id: 'anime-search',
+    name: 'Anime Search',
+    description: 'Search for anime by title with full metadata',
+    method: 'GET',
+    endpoint: '/api/anime/search',
+    category: 'Anime',
+    icon: Wand2,
+    parameters: [
+      { name: 'query', type: 'string', required: true, description: 'Anime title' }
+    ]
+  },
+  {
+    id: 'anime-top',
+    name: 'Top Anime',
+    description: 'Get top-rated anime from MyAnimeList',
+    method: 'GET',
+    endpoint: '/api/anime/top',
+    category: 'Anime',
+    icon: Zap,
+    parameters: [
+      { name: 'page', type: 'number', required: false, description: 'Page number' },
+      { name: 'type', type: 'string', required: false, description: 'Filter: airing, upcoming, bypopularity, favorite' }
+    ]
+  },
+  {
+    id: 'anime-random',
+    name: 'Random Anime',
+    description: 'Get a random anime recommendation',
+    method: 'GET',
+    endpoint: '/api/anime/random',
+    category: 'Anime',
+    icon: Brain
+  },
+  {
+    id: 'anime-characters',
+    name: 'Anime Characters',
+    description: 'Get characters for a specific anime',
+    method: 'GET',
+    endpoint: '/api/anime/characters',
+    category: 'Anime',
+    icon: Image,
+    parameters: [
+      { name: 'id', type: 'number', required: true, description: 'MyAnimeList anime ID' }
+    ]
+  },
+  {
+    id: 'anime-episodes',
+    name: 'Anime Episodes',
+    description: 'Get episode list for an anime',
+    method: 'GET',
+    endpoint: '/api/anime/episodes',
+    category: 'Anime',
+    icon: Zap,
+    parameters: [
+      { name: 'id', type: 'number', required: true, description: 'MyAnimeList anime ID' }
+    ]
+  },
+  {
+    id: 'anime-recommendations',
+    name: 'Anime Recommendations',
+    description: 'Get anime recommendations based on your favorites',
+    method: 'GET',
+    endpoint: '/api/anime/recommendations',
+    category: 'Anime',
+    icon: Brain,
+    parameters: [
+      { name: 'id', type: 'number', required: true, description: 'MyAnimeList anime ID' }
+    ]
+  },
+  {
+    id: 'waifu-random',
+    name: 'Random Waifu',
+    description: 'Get random waifu images from various categories',
+    method: 'GET',
+    endpoint: '/api/waifu/random',
+    category: 'Anime',
+    icon: Image,
+    parameters: [
+      { name: 'category', type: 'string', required: false, description: 'waifu, neko, shinobu, megumin, bully, etc.' }
+    ]
+  },
+  {
+    id: 'anime-quotes',
+    name: 'Anime Quotes',
+    description: 'Get random quotes from popular anime',
+    method: 'GET',
+    endpoint: '/api/anime/quotes',
+    category: 'Anime',
+    icon: MessageSquare,
+    parameters: [
+      { name: 'anime', type: 'string', required: false, description: 'Filter by anime title' },
+      { name: 'character', type: 'string', required: false, description: 'Filter by character name' }
+    ]
+  },
+  // ─── Tools (NEW) ───
+  {
+    id: 'qr-generator',
+    name: 'QR Code Generator',
+    description: 'Generate QR codes from text or URLs',
+    method: 'GET',
+    endpoint: '/api/tools/qr',
+    category: 'Tools',
+    icon: QrCode,
+    parameters: [
+      { name: 'text', type: 'string', required: true, description: 'Text or URL to encode' }
+    ]
+  },
+  {
+    id: 'password-generator',
+    name: 'Password Generator',
+    description: 'Generate secure random passwords',
+    method: 'GET',
+    endpoint: '/api/tools/password',
+    category: 'Tools',
+    icon: Shield,
+    parameters: [
+      { name: 'length', type: 'number', required: false, description: 'Password length (default: 16)' },
+      { name: 'includeSymbols', type: 'boolean', required: false, description: 'Include special characters' }
+    ]
+  },
+  {
+    id: 'url-shortener',
+    name: 'URL Shortener',
+    description: 'Shorten long URLs',
+    method: 'POST',
+    endpoint: '/api/tools/shorten',
+    category: 'Tools',
+    icon: Zap,
+    parameters: [
+      { name: 'url', type: 'string', required: true, description: 'URL to shorten' }
+    ]
+  },
+  {
+    id: 'image-to-text',
+    name: 'Image to Text (OCR)',
+    description: 'Extract text from images using OCR',
+    method: 'POST',
+    endpoint: '/api/tools/ocr',
+    category: 'Tools',
+    icon: Camera,
+    parameters: [
+      { name: 'image', type: 'file', required: true, description: 'Image file' }
+    ]
+  },
+  {
+    id: 'code-runner',
+    name: 'Code Runner',
+    description: 'Execute code in JavaScript, Python, or other languages',
+    method: 'POST',
+    endpoint: '/api/tools/run-code',
+    category: 'Tools',
+    icon: Wand2,
+    parameters: [
+      { name: 'code', type: 'string', required: true, description: 'Source code' },
+      { name: 'language', type: 'string', required: true, description: 'Programming language' }
+    ]
+  },
+  {
+    id: 'text-to-speech',
+    name: 'Text to Speech',
+    description: 'Convert text to spoken audio',
+    method: 'GET',
+    endpoint: '/api/tools/tts',
+    category: 'Tools',
+    icon: Mic,
+    parameters: [
+      { name: 'text', type: 'string', required: true, description: 'Text to speak' },
+      { name: 'voice', type: 'string', required: false, description: 'Voice type' }
+    ]
+  },
+  {
+    id: 'translate',
+    name: 'Translation',
+    description: 'Translate text between languages',
+    method: 'GET',
+    endpoint: '/api/tools/translate',
+    category: 'Tools',
+    icon: Translate,
+    parameters: [
+      { name: 'text', type: 'string', required: true, description: 'Text to translate' },
+      { name: 'target', type: 'string', required: true, description: 'Target language code (e.g., es)' }
+    ]
+  },
+  {
+    id: 'lyrics',
+    name: 'Lyrics Finder',
+    description: 'Find song lyrics by artist and title',
+    method: 'GET',
+    endpoint: '/api/tools/lyrics',
+    category: 'Tools',
+    icon: Music,
+    parameters: [
+      { name: 'artist', type: 'string', required: true, description: 'Artist name' },
+      { name: 'title', type: 'string', required: true, description: 'Song title' }
+    ]
+  },
+  {
+    id: 'weather',
+    name: 'Weather Forecast',
+    description: 'Get current weather and forecast for any city',
+    method: 'GET',
+    endpoint: '/api/tools/weather',
+    category: 'Tools',
+    icon: Globe,
+    parameters: [
+      { name: 'city', type: 'string', required: true, description: 'City name' }
+    ]
+  },
+  {
+    id: 'news',
+    name: 'News Headlines',
+    description: 'Get latest news headlines by category or region',
+    method: 'GET',
+    endpoint: '/api/tools/news',
+    category: 'Tools',
+    icon: Globe,
+    parameters: [
+      { name: 'category', type: 'string', required: false, description: 'Category: technology, sports, business, etc.' }
+    ]
   }
 ];
 

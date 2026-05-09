@@ -26,6 +26,7 @@ import { youTubeAdvancedService } from './services/youtube-advanced';
 import { pinterestService } from './services/pinterest';
 import { pollinationsService } from './services/pollinations';
 import { grokService } from './services/grok';
+import { registerNewRoutes } from './new-routes';
 import { weatherService } from './services/weather';
 import { newsService } from './services/news';
 import { instagramAdvancedService } from './services/instagram-advanced';
@@ -83,6 +84,8 @@ import session from 'express-session';
 import { insertUserSchema } from '@shared/schema';
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Register new API routes
+  registerNewRoutes(app);
   
   // Session configuration for admin panel
   app.use(session({
