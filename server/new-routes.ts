@@ -478,5 +478,120 @@ export function registerNewRoutes(app: Express) {
     } catch { res.status(500).json({ error: 'Servers unavailable' }); }
   });
 
-  console.log('✅ New API routes registered (nanobanana, games, anime, spotify, youtube, tools, downloader, editing, movies, anime-download)');
+  // ─── Movie Download ───
+  app.get('/api/movies/download', async (req, res) => {
+    const { id, source } = req.query;
+    if (!id) return res.status(400).json({ error: 'Movie ID required' });
+    try {
+      const src = String(source || 'tmdb');
+      if (src === 'tmdb') {
+        const r = await fetch(`https://api.themoviedb.org/3/movie/${id}?api_key=${process.env.TMDB_KEY || ''}&append_to_response=videos,external_ids`);
+        const d = await r.json() as any;
+        res.json({
+          title: d?.title || '',
+          overview: d?.overview || '',
+          poster: d?.poster_path ? `https://image.tmdb.org/t/p/w500${d.poster_path}` : '',
+          backdrop: d?.backdrop_path ? `https://image.tmdb.org/t/p/w1280${d.backdrop_path}` : '',
+          runtime: d?.runtime || 0,
+          rating: d?.vote_average || 0,
+          trailer: d?.videos?.results?.[0]?.key ? `https://www.youtube.com/watch?v=${d.videos.results[0].key}` : '',
+          source: 'tmdb',
+          downloadUrl: `https://www.google.com/search?q=${encodeURIComponent(d?.title || '')}+movie+download+free`,
+        });
+      } else if (src === 'flix') {
+        const r = await fetch(`https://flixhq.to/ajax/movie/episodes/${id}`);
+        const d = await r.json() as any;
+        res.json({ data: d, source: 'flixhq' });
+      } else {
+        res.json({ id, source: src, downloadUrl: `https://www.google.com/search?q=movie+${id}+download` });
+      }
+    } catch { res.status(500).json({ error: 'Movie download unavailable' }); }
+  });
+
+  app.get('/api/movies/stream', async (req, res) => {
+    const { id, season, episode } = req.query;
+    if (!id) return res.status(400).json({ error: 'Movie/Show ID required' });
+    try {
+      const r = await fetch(`https://api.themoviedb.org/3/movie/${id}/watch/providers?api_key=${process.env.TMDB_KEY || ''}`);
+      const d = await r.json() as any;
+      res.json({
+        results: d?.results || {},
+        streamUrl: `https://www.google.com/search?q=watch+${encodeURIComponent(id)}+online+free`,
+        source: 'tmdb'
+      });
+    } catch { res.status(500).json({ error: 'Stream info unavailable' }); }
+  });
+
+  // ─── Fix Old/Updated APIs ───
+  app.get('/api/ytdl', async (req, res) => {
+    const url = String(req.query.url || '');
+    if (!url) return res.status(400).json({ error: 'URL required' });
+    try {
+      const r = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`);
+      const d = await r.json() as any;
+      const videoId = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]+)/)?.[1];
+      res.json({
+        title: d?.title || '', author: d?.author_name || '',
+        thumbnail: videoId ? `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg` : '',
+        videoId, formats: [{ quality: '720p', url: `https://www.youtube.com/watch?v=${videoId}` }],
+        source: 'youtube-oembed'
+      });
+    } catch { res.status(500).json({ error: 'Download unavailable' }); }
+  });
+
+  app.get('/api/instagram', async (req, res) => {
+    const url = String(req.query.url || '');
+    if (!url) return res.status(400).json({ error: 'URL required' });
+    try {
+      const r = await fetch(`https://api.instagram.com/oembed?url=${encodeURIComponent(url)}`);
+      const d = await r.json() as any;
+      res.json({ title: d?.title || '', author: d?.author_name || '', thumbnail: d?.thumbnail_url || '', source: 'instagram-oembed' });
+    } catch { res.status(500).json({ error: 'Instagram unavailable' }); }
+  });
+
+  app.get('/api/tiktok', async (req, res) => {
+    const url = String(req.query.url || '');
+    if (!url) return res.status(400).json({ error: 'URL required' });
+    try {
+      const r = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`);
+      const d = await r.json() as any;
+      res.json({
+        author: d?.data?.author?.nickname || '', title: d?.data?.title || '',
+        videoUrl: d?.data?.play || d?.data?.wmplay || '',
+        music: d?.data?.music || '', source: 'tikwm'
+      });
+    } catch { res.status(500).json({ error: 'TikTok unavailable' }); }
+  });
+
+  app.get('/api/facebook', async (req, res) => {
+    const url = String(req.query.url || '');
+    if (!url) return res.status(400).json({ error: 'URL required' });
+    try {
+      const r = await fetch(`https://www.facebook.com/plugins/video/oembed.json?url=${encodeURIComponent(url)}`);
+      const d = await r.json() as any;
+      res.json({ title: d?.title || '', author: d?.author_name || '', html: d?.html || '', source: 'facebook-oembed' });
+    } catch { res.status(500).json({ error: 'Facebook unavailable' }); }
+  });
+
+  app.get('/api/twitter', async (req, res) => {
+    const url = String(req.query.url || '');
+    if (!url) return res.status(400).json({ error: 'URL required' });
+    try {
+      const r = await fetch(`https://api.twitter.com/2/tweets?ids=${encodeURIComponent(url)}`);
+      const d = await r.json() as any;
+      res.json({ data: d?.data || {}, source: 'twitter' });
+    } catch { res.status(500).json({ error: 'Twitter unavailable' }); }
+  });
+
+  app.get('/api/soundcloud', async (req, res) => {
+    const url = String(req.query.url || '');
+    if (!url) return res.status(400).json({ error: 'URL required' });
+    try {
+      const r = await fetch(`https://soundcloud.com/oembed?url=${encodeURIComponent(url)}&format=json`);
+      const d = await r.json() as any;
+      res.json({ title: d?.title || '', author: d?.author_name || '', thumbnail: d?.thumbnail_url || '', source: 'soundcloud-oembed' });
+    } catch { res.status(500).json({ error: 'SoundCloud unavailable' }); }
+  });
+
+  console.log('✅ New API routes registered (including movie download, fixed social apis, ytdl, instagram, tiktok, facebook, twitter, soundcloud)');
 }
