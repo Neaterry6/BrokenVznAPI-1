@@ -1,0 +1,4 @@
+import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+export default function CodeExample({ language, icon, code, title }) {
+    return (_jsxs("div", { className: "bg-card border border-border rounded-lg overflow-hidden", "data-testid": `code-example-${language.toLowerCase()}`, children: [_jsx("div", { className: "bg-muted px-4 py-3 border-b border-border", children: _jsxs("div", { className: "flex items-center space-x-2", children: [_jsx("i", { className: icon }), _jsx("span", { className: "font-medium text-foreground", "data-testid": `text-language-${language.toLowerCase()}`, children: title || language })] }) }), _jsx("div", { className: "code-block p-4", children: _jsx("pre", { className: "font-mono text-sm text-gray-100 overflow-x-auto", "data-testid": `code-content-${language.toLowerCase()}`, children: _jsx("code", { dangerouslySetInnerHTML: { __html: code } }) }) })] }));
+}
