@@ -47,7 +47,7 @@ module.exports = {
   },
 
   overrides: [
-    // Configuration for TypeScript files
+    // Configuration for JavaScript files
     {
       files: ['**/*.ts', '**/*.tsx'],
       parserOptions: {
