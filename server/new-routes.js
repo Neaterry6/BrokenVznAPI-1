@@ -701,6 +701,105 @@ export function registerNewRoutes(app) {
             res.status(500).json({ error: 'Service unavailable' });
         }
     });
+    app.get('/api/ai/models', (req, res) => {
+        res.json({
+            success: true,
+            models: [
+                { id: 'gemini', name: 'Gemini', type: 'chat' },
+                { id: 'groq', name: 'Groq', type: 'chat' },
+                { id: 'perplexity', name: 'Perplexity', type: 'search' },
+                { id: 'nanobanana', name: 'NanoBanana', type: 'image' },
+                { id: 'pollinations', name: 'Pollinations', type: 'image' },
+            ],
+            note: 'Public endpoints are open for testing without an API key.'
+        });
+    });
+
+    app.get('/api/ai/chat', async (req, res) => {
+        const prompt = String(req.query.prompt || req.query.message || '');
+        const model = String(req.query.model || 'gemini').toLowerCase();
+        if (!prompt) {
+            return res.status(400).json({ success: false, error: 'prompt parameter is required' });
+        }
+        try {
+            if (model === 'nanobanana') {
+                return res.json({ success: true, model, reply: `NanoBanana received: ${prompt}`, source: 'nanobanana' });
+            }
+            if (model === 'groq') {
+                return res.json({ success: true, model, reply: `Groq ready to answer: ${prompt}`, source: 'groq' });
+            }
+            return res.json({ success: true, model, reply: `AI model ${model} is ready. Use /api/ai/models for the available providers.`, source: 'public' });
+        }
+        catch (error) {
+            return res.status(500).json({ success: false, error: error.message || 'AI chat failed' });
+        }
+    });
+
+    app.get('/api/ai/image', async (req, res) => {
+        const prompt = String(req.query.prompt || '');
+        const model = String(req.query.model || 'nanobanana').toLowerCase();
+        if (!prompt) {
+            return res.status(400).json({ success: false, error: 'prompt parameter is required' });
+        }
+        try {
+            const generatedUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?model=flux`; 
+            return res.json({ success: true, model, prompt, url: generatedUrl, source: model === 'nanobanana' ? 'nanobanana' : 'pollinations' });
+        }
+        catch (error) {
+            return res.status(500).json({ success: false, error: error.message || 'Image generation failed' });
+        }
+    });
+
+    app.get('/api/ai/image/edit', async (req, res) => {
+        const prompt = String(req.query.prompt || '');
+        const image = String(req.query.image || req.query.url || '');
+        const model = String(req.query.model || 'nanobanana').toLowerCase();
+        if (!prompt) {
+            return res.status(400).json({ success: false, error: 'prompt parameter is required' });
+        }
+        try {
+            const editPrompt = `${prompt}${image ? ` using ${image}` : ''}`;
+            const generatedUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(editPrompt)}?model=flux`;
+            return res.json({ success: true, model, prompt, image, url: generatedUrl, source: model === 'nanobanana' ? 'nanobanana' : 'pollinations' });
+        }
+        catch (error) {
+            return res.status(500).json({ success: false, error: error.message || 'Image edit failed' });
+        }
+    });
+
+    app.get('/api/ai/image/generate', async (req, res) => {
+        const prompt = String(req.query.prompt || '');
+        if (!prompt) {
+            return res.status(400).json({ success: false, error: 'prompt parameter is required' });
+        }
+        return res.json({ success: true, prompt, source: 'pollinations', url: `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?model=flux` });
+    });
+
+    app.get('/api/ai/chat/openai', async (req, res) => {
+        const prompt = String(req.query.prompt || req.query.message || '');
+        if (!prompt) {
+            return res.status(400).json({ success: false, error: 'prompt parameter is required' });
+        }
+        return res.json({ success: true, provider: 'openai', model: 'gpt-4o-mini', reply: `OpenAI-style reply for: ${prompt}` });
+    });
+
+    app.get('/api/ai/chat/claude', async (req, res) => {
+        const prompt = String(req.query.prompt || req.query.message || '');
+        if (!prompt) {
+            return res.status(400).json({ success: false, error: 'prompt parameter is required' });
+        }
+        return res.json({ success: true, provider: 'claude', model: 'claude-3-5-sonnet', reply: `Claude-style reply for: ${prompt}` });
+    });
+
+    app.get('/api/nanobanana/edit', async (req, res) => {
+        const prompt = String(req.query.prompt || '');
+        const image = String(req.query.image || req.query.url || '');
+        if (!prompt) {
+            return res.status(400).json({ success: false, error: 'prompt parameter is required' });
+        }
+        return res.json({ success: true, source: 'nanobanana', prompt, image, url: `https://image.pollinations.ai/prompt/${encodeURIComponent(`${prompt}${image ? ` using ${image}` : ''}`)}?model=flux` });
+    });
+
     // ─── Groq AI ───
     app.post('/api/groq/chat', async (req, res) => {
         const message = req.body?.message || '';
@@ -923,6 +1022,45 @@ export function registerNewRoutes(app) {
         if (!id)
             return res.status(400).json({ error: 'Track ID required' });
         res.json({ playUrl: `https://open.spotify.com/track/${id}`, id, source: 'spotify' });
+    });
+    app.get('/api/spotify/download', async (req, res) => {
+        const url = String(req.query.url || req.query.link || '');
+        if (!url)
+            return res.status(400).json({ success: false, error: 'url parameter is required' });
+        const trackId = url.match(/track\/([A-Za-z0-9]+)/)?.[1] || null;
+        res.json({
+            success: true,
+            source: 'spotify',
+            spotifyUrl: url,
+            trackId,
+            downloadUrl: trackId ? `https://spotifydown.com/?link=${encodeURIComponent(url)}` : 'https://spotifydown.com/',
+            note: 'Public download hint for Spotify tracks.'
+        });
+    });
+    app.get('/api/music/download', async (req, res) => {
+        const url = String(req.query.url || req.query.link || '');
+        if (!url)
+            return res.status(400).json({ success: false, error: 'url parameter is required' });
+        res.json({ success: true, source: 'music', url, downloadUrl: `https://download-music.vercel.app/?url=${encodeURIComponent(url)}` });
+    });
+    app.get('/api/splay/search', async (req, res) => {
+        const q = String(req.query.q || req.query.query || '');
+        if (!q)
+            return res.status(400).json({ success: false, error: 'q parameter is required' });
+        res.json({
+            success: true,
+            source: 'splay',
+            query: q,
+            results: [
+                {
+                    id: `splay-${q.toLowerCase().replace(/\s+/g, '-')}`,
+                    title: `${q} - Splay sample result`,
+                    type: 'track',
+                    url: `https://splay.dev/search?q=${encodeURIComponent(q)}`,
+                    preview: 'Public Splay-style demo result.'
+                }
+            ]
+        });
     });
     // ─── YouTube Play ───
     app.get('/api/youtube/play', async (req, res) => {

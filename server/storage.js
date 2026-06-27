@@ -4,34 +4,12 @@ export class FirebaseStorage {
     memoryFallback;
     constructor() {
         this.memoryFallback = new Map();
-        this.createDefaultAdmin();
     }
     get db() {
         return getFirestore();
     }
     async createDefaultAdmin() {
-        const defaultAdmin = {
-            _id: randomUUID(),
-            email: String(process.env.ADMIN_EMAIL || 'akewusholaabdulbakri101@gmail.com').toLowerCase(),
-            password: null,
-            authProvider: "google.com",
-            role: "admin",
-            createdAt: new Date(),
-        };
-        try {
-            const db = this.db;
-            if (db) {
-                const existing = await db.query('admins', { field: 'email', value: defaultAdmin.email }, { limit: 1 });
-                if (existing.length === 0) {
-                    await db.setDoc('admins', defaultAdmin._id, defaultAdmin);
-                }
-                return;
-            }
-        }
-        catch (error) {
-            console.error("Failed to create default Firebase admin:", error);
-        }
-        this.memoryFallback.set('admin-' + defaultAdmin.email, defaultAdmin);
+        return null;
     }
     async getUser(id) {
         const db = this.db;

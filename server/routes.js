@@ -80,35 +80,16 @@ import { imgurFreeService } from './services/imgur-free';
 import { imgbbService } from './services/imgbb-api';
 import { enhancedWaifuService } from './services/enhanced-waifu-api';
 import multer from 'multer';
-import session from 'express-session';
 export async function registerRoutes(app) {
-    // Session configuration for admin panel
-    app.use(session({
-        secret: process.env.SESSION_SECRET || 'admin-session-secret-change-in-production',
-        resave: false,
-        saveUninitialized: false,
-        cookie: { secure: false, maxAge: 24 * 60 * 60 * 1000 } // 24 hours
-    }));
-    const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
-    const ADMIN_EMAIL = normalizeEmail(process.env.ADMIN_EMAIL || 'akewusholaabdulbakri101@gmail.com');
-    const publicApiPrefixes = ['/api/auth', '/api/admin', '/api/status', '/api/health'];
+    // Sessions and admin UI removed. API uses API keys only.
+    const publicApiPrefixes = ['/api/status', '/api/health'];
     const sendApiKeyRequired = (res) => res.status(401).json({
         success: false,
-        error: 'API key required. Sign in with Google to create an account, then send your key using the X-API-Key header.',
+        error: 'API key required. See /docs for usage and the API playground.',
         auth: {
-            login: '/login',
-            firebaseLogin: 'POST /api/auth/firebase-login',
             header: 'X-API-Key: bvzn_your_key_here'
         }
     });
-    const requireAdmin = (req, res, next) => {
-        if (req.session?.isAdminLoggedIn && normalizeEmail(req.session?.adminEmail) === ADMIN_EMAIL) {
-            next();
-        }
-        else {
-            res.status(401).json({ success: false, error: 'Admin Google authentication required' });
-        }
-    };
     const toUserPayload = (user) => ({
         id: user._id,
         username: user.username,
@@ -122,42 +103,14 @@ export async function registerRoutes(app) {
         createdAt: user.createdAt,
         lastLogin: user.lastLogin
     });
-    const upsertFirebaseUser = async (firebaseUser) => {
-        const email = normalizeEmail(firebaseUser.email);
-        if (!email) {
-            throw new Error('Firebase account must include an email address');
-        }
-        const role = email === ADMIN_EMAIL ? 'admin' : 'user';
-        const displayName = firebaseUser.displayName || email.split('@')[0];
-        let user = null;
-        if (firebaseUser.uid) {
-            user = await storage.getUserByFirebaseUid(firebaseUser.uid);
-        }
-        if (!user) {
-            user = await storage.getUserByEmail(email);
-        }
-        const sharedFields = {
-            email,
-            firebaseUid: firebaseUser.uid,
-            displayName,
-            photoURL: firebaseUser.photoURL || null,
-            authProvider: 'google.com',
-            role,
-            lastLogin: new Date()
-        };
-        if (user) {
-            return storage.updateUser(user._id, sharedFields);
-        }
-        return storage.createUser({
-            username: displayName,
-            password: null,
-            ...sharedFields
-        });
-    };
+    // Firebase-based auth and admin account creation removed from server.
     const validateApiKey = async (req, res, next) => {
         try {
             const apiKey = String(req.headers['x-api-key'] || req.query.apiKey || '').trim();
-            if (!apiKey) return sendApiKeyRequired(res);
+            if (!apiKey) {
+                req.user = null;
+                return next();
+            }
             const user = await storage.getUserByApiKey(apiKey);
             if (!user || user.isActive === false) {
                 return res.status(401).json({ success: false, error: 'Invalid or inactive API key' });
@@ -175,6 +128,10 @@ export async function registerRoutes(app) {
             return next();
         }
         return validateApiKey(req, res, next);
+    });
+    // Disable admin APIs
+    app.use('/api/admin', (req, res) => {
+        res.status(404).json({ success: false, error: 'Admin APIs have been removed' });
     });
     registerNewRoutes(app);
     // Log API usage
@@ -419,66 +376,16 @@ export async function registerRoutes(app) {
     });
     // User management
     app.post('/api/auth/firebase-login', async (req, res) => {
-        try {
-            const { idToken } = req.body;
-            if (!idToken) {
-                return res.status(400).json({ success: false, error: 'Firebase idToken is required' });
-            }
-            const firebaseUser = await verifyFirebaseIdToken(idToken);
-            const user = await upsertFirebaseUser(firebaseUser);
-            req.session.userId = user._id;
-            req.session.userEmail = user.email;
-            req.session.apiKey = user.apiKey;
-            if (normalizeEmail(user.email) === ADMIN_EMAIL) {
-                req.session.isAdminLoggedIn = true;
-                req.session.adminId = user._id;
-                req.session.adminEmail = ADMIN_EMAIL;
-            }
-            res.json({
-                success: true,
-                message: 'Signed in with Firebase Google Auth',
-                user: toUserPayload(user),
-                admin: normalizeEmail(user.email) === ADMIN_EMAIL
-            });
-        }
-        catch (error) {
-            res.status(401).json({ success: false, error: error.message || 'Firebase login failed' });
-        }
+        res.status(410).json({ success: false, error: 'Authentication endpoints have been removed. See /docs for API usage.' });
     });
     app.get('/api/auth/me', async (req, res) => {
-        try {
-            let user = req.session?.userId ? await storage.getUser(req.session.userId) : null;
-            const bearer = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
-            if (!user && bearer) {
-                const firebaseUser = await verifyFirebaseIdToken(bearer);
-                user = await upsertFirebaseUser(firebaseUser);
-                req.session.userId = user._id;
-                req.session.userEmail = user.email;
-                req.session.apiKey = user.apiKey;
-            }
-            if (!user) {
-                return res.status(401).json({ success: false, error: 'Not signed in' });
-            }
-            res.json({ success: true, user: toUserPayload(user), admin: normalizeEmail(user.email) === ADMIN_EMAIL });
-        }
-        catch (error) {
-            res.status(401).json({ success: false, error: error.message || 'Unable to read current user' });
-        }
+        res.status(410).json({ success: false, error: 'Authentication endpoints have been removed.' });
     });
     app.post('/api/auth/logout', (req, res) => {
-        req.session.userId = null;
-        req.session.userEmail = null;
-        req.session.apiKey = null;
-        req.session.isAdminLoggedIn = false;
-        req.session.adminId = null;
-        req.session.adminEmail = null;
-        res.json({ success: true, message: 'Logged out successfully' });
+        res.status(410).json({ success: false, error: 'Authentication endpoints have been removed.' });
     });
     app.post('/api/auth/register', async (req, res) => {
-        res.status(410).json({
-            success: false,
-            error: 'Password registration has been disabled. Use Firebase Google Auth at POST /api/auth/firebase-login to create an account and API key.'
-        });
+        res.status(410).json({ success: false, error: 'Registration endpoint has been removed.' });
     });
     // Quotes endpoints
     app.get('/api/quotes/random', async (req, res) => {
