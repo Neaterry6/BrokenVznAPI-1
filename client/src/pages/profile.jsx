@@ -27,7 +27,7 @@ export default function Profile() {
     useEffect(() => {
         const isLoggedIn = localStorage.getItem('isLoggedIn');
         if (!isLoggedIn) {
-            setLocation('/login');
+            setLocation('/docs');
             return;
         }
         const userData = localStorage.getItem('user');
