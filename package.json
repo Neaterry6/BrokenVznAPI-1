@@ -2,10 +2,14 @@
   "name": "rest-express",
   "version": "1.0.0",
   "type": "module",
+  "main": "dist/index.js",
   "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "dev": "NODE_ENV=development tsx server/index.js",
-    "build": "vite build && esbuild server/index.js --platform=node --packages=external --bundle --format=esm --outdir=dist",
+    "build": "vite build && esbuild server/index.js --platform=node --packages=external --bundle --format=esm --outdir=dist --out-extension:.js=.js",
     "start": "NODE_ENV=production node dist/index.js",
     "check": "node --check server/index.js",
     "postinstall": "node -e \"try { require('yt-dlp-wrap').downloadBinary() } catch (e) { console.warn('yt-dlp binary download failed:', e) }\""
