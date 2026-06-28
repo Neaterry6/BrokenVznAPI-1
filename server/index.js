@@ -1,6 +1,5 @@
 import "dotenv/config";
 import express from "express";
-import { setupVite, serveStatic, log } from "./vite";
 import { connectDB } from "./db";
 import { registerRoutes } from "./routes";
 const app = express();
@@ -57,6 +56,7 @@ app.use((req, res, next) => {
         // doesn't interfere with the other routes
         if (app.get("env") === "development") {
             try {
+                const { setupVite } = await import("./vite.js");
                 await setupVite(app, server);
             }
             catch (viteError) {
@@ -65,6 +65,7 @@ app.use((req, res, next) => {
             }
         }
         else {
+            const { serveStatic } = await import("./vite.js");
             serveStatic(app);
         }
         // ALWAYS serve the app on the port specified in the environment variable PORT
